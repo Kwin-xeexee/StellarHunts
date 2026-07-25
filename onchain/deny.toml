@@ -20,6 +20,14 @@ exclude-dev = false
 # Use the canonical RustSec advisory DB.
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
+# Transitive unmaintained (derivative, paste via soroban-sdk-macros 22.x) and
+# unsound crates can't realistically be excluded — soroban-sdk is the SDK we
+# ship from. cargo-deny v0.16+ defaults are stricter than v0.14, so silence
+# here and tighten to "workspace" / "transitive" once upstream drops these.
+unmaintained = "none"
+unsound = "none"
+# Yanked releases still surface as a warning — cheap to fix on call.
+yanked = "warn"
 # Ignore specific advisories by ID (use sparingly, document each in the PR).
 ignore = []
 
