@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common"
-import { type Repository, MoreThan } from "typeorm"
+import { type Repository, LessThan, MoreThan } from "typeorm"
 import { Cron, CronExpression } from "@nestjs/schedule"
 import { type Queue, QueueStatus, SkillLevel } from "./entities/queue.entity"
 import type { Match } from "./entities/match.entity"
@@ -301,7 +301,7 @@ export class MultiplayerQueueService {
     oneDayAgo.setDate(oneDayAgo.getDate() - 1)
 
     const result = await this.queueRepository.delete({
-      createdAt: MoreThan(oneDayAgo),
+      createdAt: LessThan(oneDayAgo),
       status: QueueStatus.LEFT,
     })
 

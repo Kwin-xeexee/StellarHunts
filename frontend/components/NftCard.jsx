@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Lock, Shield } from "lucide-react";
 
@@ -13,13 +13,24 @@ const getRarityColor = (rarity) => {
 };
 
 // Displays a single NFT with rarity gradient, lock state, and claim action.
-const NFTCard = ({ nft }) => {
+const NFTCard = ({ nft, onClaim }) => {
   const [isHovered, setIsHovered] = useState(false);
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (!nft.locked && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        onClaim?.(nft);
+      }
+    },
+    [nft, onClaim]
+  );
 
   return (
     <div
-      aria-label={nft?.name ? `NFT: ${nft.name}` : "NFT card"}
-      className="relative overflow-hidden transition-transform duration-300 group rounded-xl hover:scale-105"
+      role="article"
+      aria-label={nft?.name ? `NFT: ${nft.name}${nft.locked ? " (locked)" : ""}` : "NFT card"}
+      className="relative overflow-hidden transition-transform duration-300 group rounded-xl hover:scale-105 focus-within:ring-2 focus-within:ring-purple-500 focus-within:ring-offset-2 focus-within:ring-offset-black"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -46,8 +57,12 @@ const NFTCard = ({ nft }) => {
 
           {/* Locked Overlay */}
           {nft.locked && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-              <Lock className="w-12 h-12 text-white/50" />
+            <div
+              role="status"
+              aria-label="This NFT is locked"
+              className="absolute inset-0 flex items-center justify-center bg-black/60"
+            >
+              <Lock className="w-12 h-12 text-white/50" aria-hidden="true" />
             </div>
           )}
 
@@ -87,15 +102,20 @@ const NFTCard = ({ nft }) => {
                 : "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             }`}
             disabled={nft.locked}
+            aria-disabled={nft.locked}
+            aria-pressed={!nft.locked ? undefined : undefined}
+            aria-label={nft.locked ? `${nft.name} is locked. Complete challenges to unlock.` : `Claim ${nft.name} NFT`}
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
           >
             {nft.locked ? (
               <span className="flex items-center">
-                <Lock className="w-4 h-4 mr-2" />
+                <Lock className="w-4 h-4 mr-2" aria-hidden="true" />
                 Complete Challenges to Unlock
               </span>
             ) : (
               <span className="flex items-center">
-                <Sparkles className="w-4 h-4 mr-2" />
+                <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" />
                 Claim NFT
               </span>
             )}

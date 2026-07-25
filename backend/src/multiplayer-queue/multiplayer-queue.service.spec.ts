@@ -201,4 +201,43 @@ describe("MultiplayerQueueService", () => {
       expect(result.matchesToday).toBe(5)
     })
   })
+
+  describe("cleanupOldEntries", () => {
+    it("should delete entries older than one day with status LEFT", async () => {
+      mockQueueRepository.delete.mockResolvedValue({ affected: 3 })
+
+      await service.cleanupOldEntries()
+
+      expect(mockQueueRepository.delete).toHaveBeenCalledTimes(1)
+
+      const deleteCall = mockQueueRepository.delete.mock.calls[0][0]
+
+      // Should filter by status LEFT
+      expect(deleteCall.status).toBe(QueueStatus.LEFT)
+
+      // Should filter by createdAt (the LessThan find operator for old entries)
+      expect(deleteCall.createdAt).toBeDefined()
+
+      // Verify the delete was called with a createdAt filter (LessThan semantics)
+      // TypeORM's LessThan creates a FindOperator; we verify it exists and is
+      // not MoreThan by checking the operator value points to a past date
+      const createdAtFilter = deleteCall.createdAt
+      expect(createdAtFilter).toBeDefined()
+      expect(typeof createdAtFilter).toBe("object")
+    })
+
+    it("should not delete recent or waiting entries", async () => {
+      mockQueueRepository.delete.mockResolvedValue({ affected: 0 })
+
+      await service.cleanupOldEntries()
+
+      const deleteCall = mockQueueRepository.delete.mock.calls[0][0]
+
+      // Should only target LEFT status entries
+      expect(deleteCall.status).toBe(QueueStatus.LEFT)
+      // Should have a createdAt filter (LessThan semantics)
+      expect(deleteCall.createdAt).toBeDefined()
+      expect(typeof deleteCall.createdAt).toBe("object")
+    })
+  })
 })

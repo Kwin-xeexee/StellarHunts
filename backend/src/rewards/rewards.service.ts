@@ -5,6 +5,7 @@ import { Reward, RewardType } from './entities/reward.entity';
 import { RewardClaim } from './entities/reward-claim.entity';
 import { CreateRewardDto } from './dto/create-reward.dto';
 import { ClaimRewardDto } from './dto/claim-reward.dto';
+import { validateRewardMetadata } from './schemas/reward-metadata.schema';
 
 @Injectable()
 export class RewardsService {
@@ -19,6 +20,13 @@ export class RewardsService {
    * Create a new reward
    */
   async createReward(createRewardDto: CreateRewardDto): Promise<Reward> {
+    // Validate metadata against the Zod schema when provided
+    if (createRewardDto.metadata) {
+      createRewardDto.metadata = validateRewardMetadata(
+        createRewardDto.metadata,
+      );
+    }
+
     const reward = this.rewardRepository.create({
       ...createRewardDto,
       currentClaims: 0,
