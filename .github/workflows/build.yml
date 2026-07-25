@@ -56,6 +56,15 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo-deny check (covers dev-deps too)
+        working-directory: onchain
+        run: cargo deny --locked check advisories licenses bans sources
+
       - name: Build contracts (test profile)
         working-directory: onchain
         run: cargo build --workspace --tests --locked
@@ -91,9 +100,9 @@ jobs:
       - name: npm audit
         working-directory: backend
         # --audit-level=high exits with non-zero if any advisory at
-        # severity high or critical is found.
+        # severity high or critical is found, so this job fails the build.
         run: npm audit --audit-level=high
-        continue-on-error: true
+
 
   backend-test:
     name: Backend tests
@@ -142,8 +151,9 @@ jobs:
 
       - name: npm audit
         working-directory: frontend
+        # Required by issue #110: CI must fail when high/critical advisories exist.
         run: npm audit --audit-level=high
-        continue-on-error: true
+
 
   frontend-build:
     name: Frontend build

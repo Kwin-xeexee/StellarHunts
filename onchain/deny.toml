@@ -60,9 +60,10 @@ multiple-versions = "deny"
 # Highlight crates that are specifically banned.
 deny = []
 # Specific crates that are allowed despite having multiple versions.
+skip = []
 skip-tree = []
-# Highlight crates with a specific git URL that should not be used.
-deny = []
+# Disallow wildcards in `use` statements (e.g. `use foo::*`).
+wildcard-imports = "deny"
 
 [sources]
 # Unknown registries, git repos, and local paths may be denied.
