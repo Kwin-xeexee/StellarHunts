@@ -7,8 +7,10 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Query,
 } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
+import type { PaginatedUserPuzzleHistory } from './analytics.service';
 
 class RecordSolveDto {
   userId: string;
@@ -21,6 +23,8 @@ export class AnalyticsController {
   private readonly logger = new Logger(AnalyticsController.name);
 
   constructor(private readonly analyticsService: AnalyticsService) {
+    // Seed once on construction so the in-memory stats have something to
+    // show before the first POST /analytics/record-solve request arrives.
     this.analyticsService.seedData();
   }
 

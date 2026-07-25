@@ -217,6 +217,45 @@ const useGameStore = create(
         }
       },
 
+      // Server-side paginated fetch used by the virtualized gallery.
+      // Returns { items, page, limit, total, hasMore } and merges new items
+      // into the in-memory store without touching localStorage (#104).
+      fetchNftsPage: async ({ page = 1, limit = 20 } = {}) => {
+        const { user } = get();
+        if (!user) return { items: [], page, limit, total: 0, hasMore: false };
+
+        try {
+          const response = await axios.get(
+            `http://localhost:4001/users/${user.id}/inventory/nfts`,
+            {
+              params: { page, limit },
+              withCredentials: true,
+            }
+          );
+
+          const data = response.data || {};
+          const items = data.items || data || [];
+          const total = data.total ?? items.length;
+          const hasMore = data.hasMore ?? page * limit < total;
+
+          if (page === 1) {
+            set({ nfts: items });
+          } else {
+            const existing = get().nfts || [];
+            const seen = new Set(existing.map((n) => n.id));
+            const merged = existing.concat(
+              items.filter((n) => n && !seen.has(n.id))
+            );
+            set({ nfts: merged });
+          }
+
+          return { items, page, limit, total, hasMore };
+        } catch (error) {
+          console.error("Failed to fetch NFT page:", error);
+          return { items: [], page, limit, total: 0, hasMore: false };
+        }
+      },
+
       // Load user data
       loadUserData: async () => {
         const { user } = get();

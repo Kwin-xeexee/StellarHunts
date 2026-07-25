@@ -232,7 +232,7 @@ export class AnalyticsService {
    */
   getMostSolvedPuzzles(
     limit?: number,
-  ): Array<{ puzzleId: string; solveCount: number }> {
+  ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
     this.logger.log('Fetching most solved puzzles...');
     const sortedPuzzles = Array.from(this.puzzleStats.entries())
       .map(([puzzleId, stats]) => ({
