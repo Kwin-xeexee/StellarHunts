@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as Joi from 'joi';
 
 import appConfig from 'config/app.config';
 import databaseConfig from 'config/database.config';
@@ -41,6 +42,14 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
       envFilePath: ['.env'],
       load: [appConfig, databaseConfig],
       cache: true,
+      validationSchema: Joi.object({
+        JWT_SECRET: Joi.string().required(),
+        DATABASE_HOST: Joi.string().required(),
+        DATABASE_PORT: Joi.number().default(5432),
+        DATABASE_USER: Joi.string().required(),
+        DATABASE_PASSWORD: Joi.string().required(),
+        DATABASE_NAME: Joi.string().required(),
+      }),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

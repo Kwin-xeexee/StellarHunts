@@ -507,9 +507,11 @@ fn require_admin(env: &Env) {
         .storage()
         .instance()
         .get(&DataKey::Admin)
-        .expect("admin not set");
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
     admin.require_auth();
 }
 
+#[cfg(test)]
+mod bench;
 #[cfg(test)]
 mod test;
