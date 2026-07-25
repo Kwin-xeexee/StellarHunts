@@ -1,6 +1,6 @@
-# StellarHunt — Backend
+# StellarHunts — Backend
 
-The backend for StellarHunt, built with [NestJS](https://nestjs.com/). This API server handles authentication, puzzle and reward management, leaderboard rankings, user progression, and blockchain interaction orchestration.
+The backend for StellarHunts, built with [NestJS](https://nestjs.com/). This API server handles authentication, puzzle and reward management, leaderboard rankings, user progression, and blockchain interaction orchestration with the Stellar / Soroban ledger.
 
 ## Tech Stack
 
@@ -86,12 +86,21 @@ DATABASE_HOST=localhost
 DATABASE_PORT=5432
 DATABASE_USER=postgres
 DATABASE_PASSWORD=your_password
-DATABASE_NAME=stellarshunt
+DATABASE_NAME=stellarshunts
 DATABASE_SYNC=true
 DATABASE_LOAD=true
 
 # Auth (required in production)
 JWT_SECRET=replace-with-a-long-random-string
+# Stellar / Soroban
+STELLAR_MODE=mock
+STELLAR_NETWORK=testnet
+SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_HUNTS_CONTRACT_ID=...
+STELLAR_HUNTS_NFT_CONTRACT_ID=...
+
+# API
+API_VERSION=v1
 ```
 
 #### Variable Reference
@@ -226,6 +235,18 @@ For production, update `FRONTEND_URL` in your environment configuration.
   minting.
 - **User Report Card** — Per-user performance summaries.
 - **Multiplayer Queue** — Socket.IO-based matchmaking.
+- **Auth** — JWT-based authentication, OAuth account linking (GitHub, Twitter, Discord)
+- **Content** — Educational articles and video management
+- **Puzzle Category** — Multi-tier puzzle organization with difficulty levels
+- **Rewards** — NFT, badge, and XP reward distribution with claim tracking
+- **Progress** — User progression, XP calculation, and level advancement
+- **Leaderboard** — Global and friend-based ranking systems
+- **Referrals** — Invite tracking with tiered reward bonuses
+- **Analytics** — Event logging and usage statistics
+- **Notifications** — In-app notification delivery
+- **NFT Claim** — Soroban smart contract interaction for on-chain badge minting (via `StellarHandlerService`)
+- **User Report Card** — Per-user performance summaries
+- **Multiplayer Queue** — Socket.IO-based matchmaking
 
 ## Related Resources
 
