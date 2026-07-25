@@ -1,27 +1,24 @@
 # cargo-deny configuration
-# See https://embarkstudios.github.io/cargo-deny/ for all options.
+# Schema target: cargo-deny 0.16+ (schema target: https://embarkstudios.github.io/cargo-deny/)
+#
+# This file is checked in CI by:
+#     cargo deny --locked check advisories licenses bans sources
+# running with `working-directory: onchain`.
 
 [graph]
-# Only check dependencies that are actually used (reachable from workspace crates).
-# This excludes dev-dependencies and unused transitive deps.
-# We keep dev-dependencies because tests are an important part of the CI surface.
+# Include dev-dependencies so violations in test toolchains are caught too.
 exclude-dev = false
 
 [advisories]
-# The path to the advisory database from which to fetch advisories.
+# Vulnerability advisories from the RustSec advisory database.
 db-path = "~/.cargo/advisory-db"
-# URL to the advisory database to fetch.
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# How often to fetch the advisory database (in seconds).
-db-fetch-delay = 86400  # 24h
-# If this is true, only advisories that have been marked as "informational" are
-# allowed, all others will be denied.
 vulnerability = "deny"
-unmaintained = "warn"
-unsound = "deny"
+unmaintained = "workspace"   # 'all' | 'workspace' | 'transitive' | 'none'
+unsound = "workspace"        # 'all' | 'workspace' | 'transitive' | 'none'
+yanked = "warn"
 notice = "warn"
-# Ignore specific advisories by ID (use sparingly, document the reason).
-# Example: ignore = ["RUSTSEC-2023-0001"]
+# Ignore specific advisories by ID (use sparingly, document each in the PR).
 ignore = []
 
 [licenses]
@@ -37,42 +34,39 @@ allow = [
     "BSD-3-Clause",
     "CC0-1.0",
     "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Unlicense",
     "Zlib",
 ]
 # Confidence threshold for license detection (0.0 – 1.0).
 confidence-threshold = 0.8
-# Copyleft licenses are denied by default to keep the project MIT-friendly.
+# Keep the project MIT-friendly: deny copyleft.
 copyleft = "deny"
-# If true, workspaces members are allowed to not have their licenses
-# explicitly specified in their Cargo.toml (inheriting from workspace is OK).
 allow-osi-fsf-free = "neither"
-# Show which crates have copyleft licenses.
-deny = []
-# Skip checking certain crates that we know have acceptable licensing but
-# the detector can't determine automatically.
-skip = []
-skip-tree = []
+# Explicit overrides per crate (SPDX expression → reason).
+clarify = []
+exceptions = []
 
 [bans]
-# Multiple versions of the same crate are disallowed unless explicitly listed.
+# Multiple versions of the same crate are not allowed unless listed in `allow`.
 multiple-versions = "deny"
 # Highlight crates that are specifically banned.
 deny = []
-# Specific crates that are allowed despite having multiple versions.
+# Crates explicitly allowed (e.g. legacy overrides) when conflicting with bans.
+allow = []
+# Skip certain crates or trees from the bans check.
 skip = []
 skip-tree = []
-# Disallow wildcards in `use` statements (e.g. `use foo::*`).
-wildcard-imports = "deny"
+# 'allow' | 'deny' | 'warn' — control `use foo::*;` wildcards (cargo-deny 0.16+).
+wildcards = "deny"
 
 [sources]
-# Unknown registries, git repos, and local paths may be denied.
+# Only allow crates from the official crates.io registry.
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
-# Only allow crates from the official crates.io registry.
-allowed-registries = ["https://github.com/rust-lang/crates.io-index"]
 
 [output]
-# If true, output is printed in a format that is easier to read in CI logs.
+# Easier-to-read graph output in CI logs.
 feature-depth = 1
