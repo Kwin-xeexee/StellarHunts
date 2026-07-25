@@ -23,6 +23,8 @@ export class AnalyticsController {
   private readonly logger = new Logger(AnalyticsController.name);
 
   constructor(private readonly analyticsService: AnalyticsService) {
+    // Seed once on construction so the in-memory stats have something to
+    // show before the first POST /analytics/record-solve request arrives.
     this.analyticsService.seedData();
   }
 
@@ -35,7 +37,9 @@ export class AnalyticsController {
   }
 
   @Get('puzzles/most-solved')
-  getMostSolvedPuzzles(): Array<{ puzzleId: string; solveCount: number }> {
+  async getMostSolvedPuzzles(): Promise<
+    Array<{ puzzleId: string; solveCount: number }>
+  > {
     this.logger.log('Handling request for most solved puzzles.');
     return this.analyticsService.getMostSolvedPuzzles();
   }

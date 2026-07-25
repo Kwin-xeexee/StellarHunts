@@ -1,3 +1,29 @@
+import { Module } from "@nestjs/common"
+import { AppController } from "./app.controller"
+import { AppService } from "./app.service"
+import { TypeOrmModule } from "@nestjs/typeorm"
+import { ConfigModule, ConfigService } from "@nestjs/config"
+import { AuthModule } from "./auth/auth.module"
+import { UserInventoryModule } from "./user-inventory/user-inventory.module"
+import { CacheModule } from "./cache/cache.module"
+import appConfig from "config/app.config"
+import databaseConfig from "config/database.config"
+import { PuzzleCategoryModule } from "./puzzle-category/puzzle-category.module"
+import { RewardsModule } from "./rewards/rewards.module"
+import { PuzzleModule } from "./puzzle/puzzle.module"
+import { PuzzleSubmissionModule } from "./puzzle-submission/puzzle-submission.module"
+import { ContentModule } from "./content/content.module"
+import { UserReportCardModule } from "./user-report-card/user-report-card.module"
+import { PuzzleDependencyModule } from "./puzzle-dependency/puzzle-dependency.module"
+import { TimeTrialModule } from "./time-trial/time-trial.module"
+import { InAppNotificationsModule } from "./in-app-notifications/in-app-notifications.module"
+import { User } from "./auth/entities/user.entity"
+import { TimeTrial } from "./time-trial/time-trial.entity"
+import { Puzzle } from "./puzzle/puzzle.entity"
+import { Category } from "./puzzle-category/entities/category.entity"
+import { AnalyticsModule } from './analytics/analytics.module';
+import { RewardShopModule } from './reward-shop/reward-shop.module';
+import { ApiKeyModule } from './api-key/api-key.module';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -53,6 +79,28 @@ async function bootstrap(): Promise<void> {
       transform: true,
       forbidNonWhitelisted: false,
     }),
+    PuzzleModule,
+    PuzzleSubmissionModule,
+    ContentModule,
+    UserReportCardModule,
+    PuzzleDependencyModule,
+    TimeTrialModule,
+    InAppNotificationsModule,
+    PuzzleTranslationModule,
+    NFTClaimModule,
+    AnalyticsModule,
+    RewardShopModule,
+    ApiKeyModule,
+    UserReactionModule,
+    MultiplayerQueueModule,
+    // Redis-backed caching + single-flight for the read-heavy endpoints
+    // (`/streaks/leaderboard`, `/analytics/puzzles/most-solved`) (#107).
+    CacheModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
   );
 
   const apiVersion = configService.get<string>('appConfig.apiVersion') ?? '1.0';
