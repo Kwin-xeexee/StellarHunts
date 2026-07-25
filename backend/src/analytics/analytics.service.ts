@@ -18,6 +18,29 @@ interface UserPuzzleEngagement {
 // cache them with a 5-minute TTL. 0-15s jitter avoids expiration
 // thundering herds at 1000 RPS (#107).
 const MOST_SOLVED_TTL_SECONDS = 300;
+export interface UserPuzzleHistoryEntry {
+  puzzleId: string;
+  solveCount: number;
+  totalSolveTime: number;
+  attempts: number;
+  lastSolved?: Date;
+}
+
+export interface PaginationMetadata {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaginatedUserPuzzleHistory {
+  data: UserPuzzleHistoryEntry[];
+  meta: PaginationMetadata;
+}
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
 
 @Injectable()
 export class AnalyticsService {
@@ -136,6 +159,56 @@ export class AnalyticsService {
       this.userPuzzleHistory.get(userId) ||
       new Map<string, UserPuzzleEngagement>()
     );
+  }
+
+  getUserPuzzleStatsPage(
+    userId: string,
+    page: number = DEFAULT_PAGE,
+    limit: number = DEFAULT_LIMIT,
+  ): PaginatedUserPuzzleHistory {
+    this.logger.log(
+      `Fetching paginated puzzle history for user ${userId} (page=${page}, limit=${limit})...`,
+    );
+
+    const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+    const normalizedPage = Math.max(page, 1);
+
+    const userHistory =
+      this.userPuzzleHistory.get(userId) ||
+      new Map<string, UserPuzzleEngagement>();
+
+    const allEntries: UserPuzzleHistoryEntry[] = Array.from(
+      userHistory.entries(),
+    ).map(([puzzleId, stats]) => ({
+      puzzleId,
+      solveCount: stats.solveCount,
+      totalSolveTime: stats.totalSolveTime,
+      attempts: stats.attempts,
+      lastSolved: stats.lastSolved,
+    }));
+
+    // Newest activity first; fall back to puzzleId for deterministic ordering.
+    allEntries.sort((a, b) => {
+      const aTime = a.lastSolved ? a.lastSolved.getTime() : 0;
+      const bTime = b.lastSolved ? b.lastSolved.getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.puzzleId.localeCompare(b.puzzleId);
+    });
+
+    const total = allEntries.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / normalizedLimit);
+    const startIdx = (normalizedPage - 1) * normalizedLimit;
+    const data = allEntries.slice(startIdx, startIdx + normalizedLimit);
+
+    return {
+      data,
+      meta: {
+        total,
+        page: normalizedPage,
+        limit: normalizedLimit,
+        totalPages,
+      },
+    };
   }
 
   seedData(): void {
