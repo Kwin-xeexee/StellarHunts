@@ -1,30 +1,30 @@
 # cargo-deny configuration
-# Schema target: cargo-deny 0.16+ (schema target: https://embarkstudios.github.io/cargo-deny/)
+# Schema target: cargo-deny 0.16+ (post PR #611).
+#   https://github.com/EmbarkStudios/cargo-deny/pull/611
 #
-# This file is checked in CI by:
+# This file is read by CI:
 #     cargo deny --locked check advisories licenses bans sources
 # running with `working-directory: onchain`.
+#
+# Several policy-level keys were REMOVED in PR #611. Defaults are now:
+#   - vulnerabilities always denied
+#   - unlicensed crates denied
+#   - copyleft denied
+# We don't re-state them so the schema check stays happy.
 
 [graph]
 # Include dev-dependencies so violations in test toolchains are caught too.
 exclude-dev = false
 
 [advisories]
-# Vulnerability advisories from the RustSec advisory database.
+# Use the canonical RustSec advisory DB.
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "workspace"   # 'all' | 'workspace' | 'transitive' | 'none'
-unsound = "workspace"        # 'all' | 'workspace' | 'transitive' | 'none'
-yanked = "warn"
-notice = "warn"
 # Ignore specific advisories by ID (use sparingly, document each in the PR).
 ignore = []
 
 [licenses]
-# Deny any crate that does not have a license we explicitly allow.
-unlicensed = "deny"
-# Allow these licenses (SPDX identifiers).
+# Allow these SPDX identifiers. Anything else is denied by default.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -40,24 +40,18 @@ allow = [
 ]
 # Confidence threshold for license detection (0.0 – 1.0).
 confidence-threshold = 0.8
-# Keep the project MIT-friendly: deny copyleft.
-copyleft = "deny"
-allow-osi-fsf-free = "neither"
-# Explicit overrides per crate (SPDX expression → reason).
-clarify = []
-exceptions = []
 
 [bans]
-# Multiple versions of the same crate are not allowed unless listed in `allow`.
+# Multiple versions of the same crate are not allowed unless listed.
 multiple-versions = "deny"
 # Highlight crates that are specifically banned.
 deny = []
-# Crates explicitly allowed (e.g. legacy overrides) when conflicting with bans.
+# Crates explicitly allowed despite conflicting with the bans rules above.
 allow = []
-# Skip certain crates or trees from the bans check.
+# Skip certain crates or trees from bans check.
 skip = []
 skip-tree = []
-# 'allow' | 'deny' | 'warn' — control `use foo::*;` wildcards (cargo-deny 0.16+).
+# 'allow' | 'deny' | 'warn' — disallow `use foo::*`.
 wildcards = "deny"
 
 [sources]
