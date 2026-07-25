@@ -26,37 +26,48 @@ export class AnalyticsController {
 
   @Post('record-solve')
   @HttpCode(HttpStatus.NO_CONTENT)
-  recordSolve(@Body() body: RecordSolveDto): void {
+  async recordSolve(@Body() body: RecordSolveDto): Promise<void> {
     this.logger.log(`Received record-solve request: ${JSON.stringify(body)}`);
     const { userId, puzzleId, solveTime } = body;
-    this.analyticsService.recordPuzzleSolve(userId, puzzleId, solveTime);
+    // Await so write errors surface as 5xx rather than being silently
+    // dropped; the service internally falls back to in-memory on Redis
+    // failure so this won't crash the request.
+    await this.analyticsService.recordPuzzleSolveAsync(
+      userId,
+      puzzleId,
+      solveTime,
+    );
   }
 
   @Get('puzzles/most-solved')
-  getMostSolvedPuzzles(): Array<{ puzzleId: string; solveCount: number }> {
+  async getMostSolvedPuzzles(): Promise<
+    Array<{ puzzleId: string; solveCount: number }>
+  > {
     this.logger.log('Handling request for most solved puzzles.');
-    return this.analyticsService.getMostSolvedPuzzles();
+    return this.analyticsService.getMostSolvedPuzzlesAsync();
   }
 
   @Get('puzzles/:puzzleId/average-solve-time')
-  getAverageSolveTime(@Param('puzzleId') puzzleId: string): {
-    puzzleId: string;
-    averageSolveTime: number;
-  } {
+  async getAverageSolveTime(
+    @Param('puzzleId') puzzleId: string,
+  ): Promise<{ puzzleId: string; averageSolveTime: number }> {
     this.logger.log(
       `Handling request for average solve time for puzzle ${puzzleId}.`,
     );
     const averageSolveTime =
-      this.analyticsService.getAverageSolveTime(puzzleId);
+      await this.analyticsService.getAverageSolveTimeAsync(puzzleId);
     return { puzzleId, averageSolveTime };
   }
 
   @Get('users/:userId/history')
-  getUserPuzzleHistory(@Param('userId') userId: string): Record<string, any> {
+  async getUserPuzzleHistory(
+    @Param('userId') userId: string,
+  ): Promise<Record<string, any>> {
     this.logger.log(`Handling request for user ${userId} puzzle history.`);
-    const userHistoryMap = this.analyticsService.getUserPuzzleStats(userId);
+    const userHistoryMap =
+      await this.analyticsService.getUserPuzzleStatsAsync(userId);
 
-    const userHistoryObject = {};
+    const userHistoryObject: Record<string, any> = {};
     userHistoryMap.forEach((value, key) => {
       userHistoryObject[key] = value;
     });
