@@ -134,7 +134,17 @@ npm run test:e2e
 
 ### Frontend Tests
 
-Currently, the frontend does not have a dedicated test suite configured. Ensure any UI changes are manually verified in the browser before submitting a pull request.
+The frontend uses [Vitest](https://vitest.dev/) with [Testing Library](https://testing-library.com/react) for unit tests.
+
+```bash
+# Run the test suite
+cd frontend && npm test
+
+# Watch mode (re-runs on file changes)
+cd frontend && npm run test:watch
+```
+
+Tests live in `frontend/tests/` and use `.test.js` (or `.test.jsx`) extensions.
 
 ### Onchain Tests
 
