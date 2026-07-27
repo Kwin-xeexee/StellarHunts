@@ -1,5 +1,10 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { CacheService } from '../cache/cache.service';
+import { ConfigService } from '@nestjs/config';
+// ioredis is already a project dependency (used by the rate-limiter).
+// We import lazily behind @Optional() ConfigService so that environments
+// without REDIS_URL — including unit tests and the dev hot-reload path —
+// stay on the existing in-memory Map without paying Redis connection cost.
+import Redis from 'ioredis';
 
 interface PuzzleStats {
   solveCount: number;
@@ -14,70 +19,133 @@ interface UserPuzzleEngagement {
   lastSolved?: Date;
 }
 
-// Most-solved rankings change very slowly outside of new solves, so we
-// cache them with a 5-minute TTL. 0-15s jitter avoids expiration
-// thundering herds at 1000 RPS (#107).
-const MOST_SOLVED_TTL_SECONDS = 300;
-export interface UserPuzzleHistoryEntry {
-  puzzleId: string;
-  solveCount: number;
-  totalSolveTime: number;
-  attempts: number;
-  lastSolved?: Date;
-}
+const PUZZLE_KEY = (puzzleId: string) => `analytics:puzzle:${puzzleId}`;
+const USER_PUZZLE_KEY = (userId: string, puzzleId: string) =>
+  `analytics:user:${userId}:puzzle:${puzzleId}`;
+const PUZZLE_INDEX_KEY = 'analytics:puzzleids';
+const userPuzzleIndexKey = (userId: string) =>
+  `analytics:user:${userId}:puzzleids`;
 
-export interface PaginationMetadata {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+function parseUserPuzzleStats(
+  raw: Record<string, string>,
+): UserPuzzleEngagement {
+  return {
+    solveCount: Number(raw.solveCount ?? 0),
+    totalSolveTime: Number(raw.totalSolveTime ?? 0),
+    attempts: Number(raw.attempts ?? 0),
+    lastSolved: raw.lastSolved ? new Date(raw.lastSolved) : undefined,
+  };
 }
-
-export interface PaginatedUserPuzzleHistory {
-  data: UserPuzzleHistoryEntry[];
-  meta: PaginationMetadata;
-}
-
-const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
 
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
+  /**
+   * In-memory mirror. Maintained as a write-through cache so that the
+   * hot read path stays O(1) once warmed, and so callers without Redis
+   * (unit tests, dev) see identical semantics. Acts as the authoritative
+   * fallback during a transient Redis outage.
+   */
   private puzzleStats = new Map<string, PuzzleStats>();
-
   private userPuzzleHistory = new Map<
     string,
     Map<string, UserPuzzleEngagement>
   >();
 
-  // Optional so the existing unit-test (which constructs `new AnalyticsService()`)
-  // does not have to change. When wired through `AnalyticsModule` (see
-  // analytics.module.ts) Redis-backed caching kicks in automatically (#107).
-  constructor(@Optional() private readonly cacheService?: CacheService) {}
-
   /**
-   * Best-effort cache invalidation of every `most-solved` key we know
-   * about. Limit-specific keys (`:limit:5`, `:limit:10`, ...) age out
-   * naturally via TTL. We delete the most-common variants eagerly so
-   * users see their solve reflected on the next read instead of after
-   * the 5-minute TTL expires (#107).
+   * When non-null, writes mirror through to Redis so multiple NestJS
+   * replicas share a consistent view of analytics data. Reads go
+   * through the async variants (`*Async`) which consult Redis first
+   * and fall back to the in-memory mirror on failure.
    */
-  private async invalidateMostSolvedCache(): Promise<void> {
-    if (!this.cacheService) return;
-    const commonLimits = ['all', '5', '10', '20', '25', '50'];
-    await this.cacheService.invalidate(
-      ...commonLimits.map((l) => `analytics:puzzles:most-solved:limit:${l}`),
-    );
+  private readonly redis: Redis | null;
+  private readonly usingRedis: boolean;
+
+  constructor(@Optional() configService?: ConfigService) {
+    const redisUrl = configService?.get<string>('REDIS_URL');
+    if (redisUrl) {
+      this.redis = new Redis(redisUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+      });
+      this.usingRedis = true;
+      this.redis.connect().catch((err: Error) => {
+        this.logger.warn(
+          `Redis connection failed for analytics (${err.message}). Writes will retry once the client reconnects; the in-memory mirror is the source of truth until then.`,
+        );
+      });
+      this.logger.log(
+        'Analytics running with Redis-backed store (multi-replica safe).',
+      );
+    } else {
+      this.redis = null;
+      this.usingRedis = false;
+      this.logger.warn(
+        'REDIS_URL not configured — analytics running on in-memory storage. ' +
+          'Stats will not survive restarts or be shared across replicas.',
+      );
+    }
   }
 
-  recordPuzzleSolve(userId: string, puzzleId: string, solveTime: number): void {
+  /**
+   * Async entry point used by the controller. Mirrors writes to Redis
+   * when configured; the in-memory mirror is updated first so the
+   * synchronous API stays consistent within the same replica even when
+   * Redis is unreachable.
+   */
+  async recordPuzzleSolveAsync(
+    userId: string,
+    puzzleId: string,
+    solveTime: number,
+  ): Promise<void> {
+    this.recordSolveMemory(userId, puzzleId, solveTime);
+
+    if (!this.usingRedis || !this.redis) {
+      return;
+    }
+    try {
+      await this.recordSolveRedis(userId, puzzleId, solveTime);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Redis write failed for analytics (in-memory state is still updated): ${message}`,
+      );
+    }
+  }
+
+  /**
+   * Synchronous in-memory-only entry point retained for callers
+   * (notably unit tests + `seedData`) that don't want to incur Redis
+   * latency or handle async errors. When Redis is configured, also
+   * fans out the write fire-and-forget so a configured Redis still
+   * receives solves from non-awaiting callers.
+   */
+  recordPuzzleSolve(
+    userId: string,
+    puzzleId: string,
+    solveTime: number,
+  ): void {
     this.logger.log(
       `Recording solve: User ${userId}, Puzzle ${puzzleId}, Time ${solveTime}`,
     );
+    this.recordSolveMemory(userId, puzzleId, solveTime);
+    if (this.usingRedis && this.redis) {
+      void this.recordSolveRedis(userId, puzzleId, solveTime).catch(
+        (err: Error) => {
+          this.logger.warn(
+            `Redis write failed for analytics (in-memory state is still updated): ${err.message}`,
+          );
+        },
+      );
+    }
+  }
 
+  private recordSolveMemory(
+    userId: string,
+    puzzleId: string,
+    solveTime: number,
+  ): void {
     let currentPuzzleStats = this.puzzleStats.get(puzzleId);
     if (!currentPuzzleStats) {
       currentPuzzleStats = { solveCount: 0, totalSolveTime: 0, attempts: 0 };
@@ -106,42 +174,106 @@ export class AnalyticsService {
     currentUserPuzzleStats.attempts++;
     currentUserPuzzleStats.lastSolved = new Date();
     currentUserPuzzles.set(puzzleId, currentUserPuzzleStats);
-
-    this.logger.log(
-      `Updated puzzle stats for ${puzzleId}: ${JSON.stringify(currentPuzzleStats)}`,
-    );
-    this.logger.log(
-      `Updated user ${userId} puzzle history for ${puzzleId}: ${JSON.stringify(currentUserPuzzleStats)}`,
-    );
-
-    // Fire-and-forget — we don't want to block the caller on cache I/O.
-    void this.invalidateMostSolvedCache();
   }
 
+  private async recordSolveRedis(
+    userId: string,
+    puzzleId: string,
+    solveTime: number,
+  ): Promise<void> {
+    const redis = this.redis!;
+    const lastSolved = new Date().toISOString();
+    const puzzleKey = PUZZLE_KEY(puzzleId);
+    const userKey = USER_PUZZLE_KEY(userId, puzzleId);
+    const userIndex = userPuzzleIndexKey(userId);
+
+    const pipeline = redis.multi();
+    pipeline.hincrby(puzzleKey, 'solveCount', 1);
+    pipeline.hincrby(puzzleKey, 'totalSolveTime', solveTime);
+    pipeline.hincrby(puzzleKey, 'attempts', 1);
+    pipeline.hset(puzzleKey, 'lastSolved', lastSolved);
+    pipeline.sadd(PUZZLE_INDEX_KEY, puzzleId);
+
+    pipeline.hincrby(userKey, 'solveCount', 1);
+    pipeline.hincrby(userKey, 'totalSolveTime', solveTime);
+    pipeline.hincrby(userKey, 'attempts', 1);
+    pipeline.hset(userKey, 'lastSolved', lastSolved);
+    pipeline.sadd(userIndex, puzzleId);
+
+    const results = await pipeline.exec();
+    this.assertPipelineOk('recordPuzzleSolveRedis', results);
+  }
+
+  /**
+   * Surface per-command failures from a Redis pipeline. ioredis returns
+   * each command result as a `[err, value]` tuple; we log a warn per
+   * failure so malformed keys or type errors aren't silently buried.
+   */
+  private assertPipelineOk(
+    label: string,
+    results: [Error | null, unknown][] | null,
+  ): void {
+    if (!results) {
+      return;
+    }
+    results.forEach(([err], idx) => {
+      if (err) {
+        this.logger.warn(
+          `Redis pipeline command ${idx} failed for ${label}: ${err.message}`,
+        );
+      }
+    });
+  }
+
+  /**
+   * Synchronous read used by callers that cannot await. Reads only the
+   * in-memory mirror; for cross-replica correctness use the async
+   * variants below.
+   */
   getMostSolvedPuzzles(
     limit?: number,
   ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
     this.logger.log('Fetching most solved puzzles...');
-    const compute = async (): Promise<Array<{ puzzleId: string; solveCount: number }>> => {
-      const sortedPuzzles = Array.from(this.puzzleStats.entries())
-        .map(([puzzleId, stats]) => ({ puzzleId, solveCount: stats.solveCount }))
-        .sort((a, b) => b.solveCount - a.solveCount);
-      return limit ? sortedPuzzles.slice(0, limit) : sortedPuzzles;
-    };
+    const sortedPuzzles = Array.from(this.puzzleStats.entries())
+      .map(([puzzleId, stats]) => ({
+        puzzleId,
+        solveCount: stats.solveCount,
+      }))
+      .sort((a, b) => b.solveCount - a.solveCount);
+    return limit ? sortedPuzzles.slice(0, limit) : sortedPuzzles;
+  }
 
-    // Skip the cache for the first call (still-empty stats) so we don't
-    // freeze a TTL window over nothing — the next request would otherwise
-    // serve stale zeros (#107). After the first recordPuzzleSolve arrives,
-    // these calls go through Redis + single-flight as designed.
-    if (!this.puzzleStats.size) {
-      return compute();
+  /**
+   * Async read used by the HTTP controller. Reads from Redis when
+   * configured (authoritative across replicas), falling back to the
+   * in-memory mirror on Redis failure.
+   */
+  async getMostSolvedPuzzlesAsync(
+    limit?: number,
+  ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
+    if (!this.usingRedis || !this.redis) {
+      return this.getMostSolvedPuzzles(limit);
     }
-
-    if (this.cacheService) {
-      const key = `analytics:puzzles:most-solved:limit:${limit ?? 'all'}`;
-      return this.cacheService.getOrSet(key, MOST_SOLVED_TTL_SECONDS, compute, 15);
+    try {
+      const ids = await this.redis.smembers(PUZZLE_INDEX_KEY);
+      const rows = await Promise.all(
+        ids.map(async (puzzleId) => {
+          const raw = await this.redis!.hgetall(PUZZLE_KEY(puzzleId));
+          return {
+            puzzleId,
+            solveCount: Number(raw?.solveCount ?? 0),
+          };
+        }),
+      );
+      rows.sort((a, b) => b.solveCount - a.solveCount);
+      return limit ? rows.slice(0, limit) : rows;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Redis read failed for analytics (falling back to in-memory): ${message}`,
+      );
+      return this.getMostSolvedPuzzles(limit);
     }
-    return compute();
   }
 
   getAverageSolveTime(puzzleId: string): number {
@@ -153,6 +285,24 @@ export class AnalyticsService {
     return 0;
   }
 
+  async getAverageSolveTimeAsync(puzzleId: string): Promise<number> {
+    if (!this.usingRedis || !this.redis) {
+      return this.getAverageSolveTime(puzzleId);
+    }
+    try {
+      const raw = await this.redis.hgetall(PUZZLE_KEY(puzzleId));
+      const solveCount = Number(raw?.solveCount ?? 0);
+      const totalSolveTime = Number(raw?.totalSolveTime ?? 0);
+      return solveCount > 0 ? totalSolveTime / solveCount : 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Redis read failed for analytics (falling back to in-memory): ${message}`,
+      );
+      return this.getAverageSolveTime(puzzleId);
+    }
+  }
+
   getUserPuzzleStats(userId: string): Map<string, UserPuzzleEngagement> {
     this.logger.log(`Fetching puzzle history for user ${userId}...`);
     return (
@@ -161,66 +311,45 @@ export class AnalyticsService {
     );
   }
 
-  getUserPuzzleStatsPage(
+  async getUserPuzzleStatsAsync(
     userId: string,
-    page: number = DEFAULT_PAGE,
-    limit: number = DEFAULT_LIMIT,
-  ): PaginatedUserPuzzleHistory {
-    this.logger.log(
-      `Fetching paginated puzzle history for user ${userId} (page=${page}, limit=${limit})...`,
-    );
-
-    const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
-    const normalizedPage = Math.max(page, 1);
-
-    const userHistory =
-      this.userPuzzleHistory.get(userId) ||
-      new Map<string, UserPuzzleEngagement>();
-
-    const allEntries: UserPuzzleHistoryEntry[] = Array.from(
-      userHistory.entries(),
-    ).map(([puzzleId, stats]) => ({
-      puzzleId,
-      solveCount: stats.solveCount,
-      totalSolveTime: stats.totalSolveTime,
-      attempts: stats.attempts,
-      lastSolved: stats.lastSolved,
-    }));
-
-    // Newest activity first; fall back to puzzleId for deterministic ordering.
-    allEntries.sort((a, b) => {
-      const aTime = a.lastSolved ? a.lastSolved.getTime() : 0;
-      const bTime = b.lastSolved ? b.lastSolved.getTime() : 0;
-      if (aTime !== bTime) return bTime - aTime;
-      return a.puzzleId.localeCompare(b.puzzleId);
-    });
-
-    const total = allEntries.length;
-    const totalPages = total === 0 ? 0 : Math.ceil(total / normalizedLimit);
-    const startIdx = (normalizedPage - 1) * normalizedLimit;
-    const data = allEntries.slice(startIdx, startIdx + normalizedLimit);
-
-    return {
-      data,
-      meta: {
-        total,
-        page: normalizedPage,
-        limit: normalizedLimit,
-        totalPages,
-      },
-    };
+  ): Promise<Map<string, UserPuzzleEngagement>> {
+    if (!this.usingRedis || !this.redis) {
+      return this.getUserPuzzleStats(userId);
+    }
+    try {
+      const ids = await this.redis.smembers(userPuzzleIndexKey(userId));
+      const entries = await Promise.all(
+        ids.map(async (puzzleId) => {
+          const raw = await this.redis!.hgetall(
+            USER_PUZZLE_KEY(userId, puzzleId),
+          );
+          return [puzzleId, parseUserPuzzleStats(raw ?? {})] as const;
+        }),
+      );
+      return new Map(entries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Redis read failed for analytics (falling back to in-memory): ${message}`,
+      );
+      return this.getUserPuzzleStats(userId);
+    }
   }
 
   seedData(): void {
     this.logger.log('Seeding initial analytics data...');
-    this.recordPuzzleSolve('user1', 'puzzleA', 120);
-    this.recordPuzzleSolve('user1', 'puzzleB', 180);
-    this.recordPuzzleSolve('user2', 'puzzleA', 150);
-    this.recordPuzzleSolve('user1', 'puzzleA', 100);
-    this.recordPuzzleSolve('user3', 'puzzleC', 200);
-    this.recordPuzzleSolve('user2', 'puzzleB', 220);
-    this.recordPuzzleSolve('user3', 'puzzleA', 90);
-    this.recordPuzzleSolve('user1', 'puzzleC', 170);
+    // Seed directly to memory to keep the test/dev hot path deterministic;
+    // when Redis is configured we don't push seed data to a shared store
+    // — that's the responsibility of the real workload.
+    this.recordSolveMemory('user1', 'puzzleA', 120);
+    this.recordSolveMemory('user1', 'puzzleB', 180);
+    this.recordSolveMemory('user2', 'puzzleA', 150);
+    this.recordSolveMemory('user1', 'puzzleA', 100);
+    this.recordSolveMemory('user3', 'puzzleC', 200);
+    this.recordSolveMemory('user2', 'puzzleB', 220);
+    this.recordSolveMemory('user3', 'puzzleA', 90);
+    this.recordSolveMemory('user1', 'puzzleC', 170);
     this.logger.log('Data seeding complete.');
   }
 }

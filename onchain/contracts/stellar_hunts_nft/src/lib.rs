@@ -23,9 +23,17 @@ pub enum NftDataKey {
     Admin,
     Minters(Address),
     Badge(Address, Levels),
+    BadgeData(Address, Levels),
     BaseUri,
     Name,
     Symbol,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct BadgeData {
+    pub minted_at: u64,
+    pub minter: Address,
 }
 
 // ---------------------------------------------------------------------
@@ -90,6 +98,7 @@ impl StellarHuntsNft {
     /// game contract passes its own contract address as `minter`.
     pub fn mint_level_badge(env: Env, minter: Address, recipient: Address, level: Levels) {
         minter.require_auth();
+
         if !Self::has_minter_role(env.clone(), minter.clone()) {
             panic_with_error!(&env, Error::NotAuthorized);
         }
@@ -100,9 +109,21 @@ impl StellarHuntsNft {
         }
         env.storage().persistent().set(&badge_key, &true);
 
+        let badge_data = BadgeData {
+            minted_at: env.ledger().timestamp(),
+            minter: minter.clone(),
+        };
+        let badge_data_key = NftDataKey::BadgeData(recipient.clone(), level.clone());
+        env.storage().persistent().set(&badge_data_key, &badge_data);
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&NftDataKey::Admin)
+            .expect("admin not set");
+
         env.events().publish(
             (Symbol::new(&env, "level_badge_minted"),),
-            (recipient, level, minter),
+            (recipient, level, minter, admin),
         );
     }
 
@@ -110,6 +131,11 @@ impl StellarHuntsNft {
         env.storage()
             .persistent()
             .has(&NftDataKey::Badge(owner, level))
+    }
+
+    pub fn get_badge_data(env: Env, owner: Address, level: Levels) -> Option<BadgeData> {
+        let key = NftDataKey::BadgeData(owner, level);
+        env.storage().persistent().get(&key)
     }
 
     // -----------------------------------------------------------------

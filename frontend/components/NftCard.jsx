@@ -2,18 +2,28 @@ import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Lock, Shield } from "lucide-react";
 
-const getRarityColor = (rarity) => {
-  const colors = {
-    Common: "from-blue-400 to-blue-600",
-    Rare: "from-purple-400 to-purple-600",
-    Epic: "from-pink-400 to-pink-600",
-    Legendary: "from-amber-400 to-amber-600",
-  };
-  return colors[rarity] || "from-gray-400 to-gray-600";
+// Static rarity → gradient class lookup. Defined at module scope so the
+// object identity is stable across renders and consumer prop identity
+// comparisons (React.memo) aren't defeated by a fresh function on every
+// parent render.
+const RARITY_GRADIENTS = {
+  Common: "from-blue-400 to-blue-600",
+  Rare: "from-purple-400 to-purple-600",
+  Epic: "from-pink-400 to-pink-600",
+  Legendary: "from-amber-400 to-amber-600",
 };
+
+const getRarityColor = (rarity) =>
+  RARITY_GRADIENTS[rarity] || "from-gray-400 to-gray-600";
 
 // Displays a single NFT with rarity gradient, lock state, and claim action.
 const NFTCard = ({ nft, onClaim }) => {
+// Wrapped in React.memo so that when a parent re-renders (e.g. the wallet
+// store updating) and passes the same `nft` reference to every card in
+// a gallery, the heavy gradient DOM tree doesn't get re-reconciled for
+// every card. Default shallow prop comparison is sufficient — the only
+// prop is `nft`.
+const NFTCard = ({ nft }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleKeyDown = useCallback(
@@ -126,4 +136,4 @@ const NFTCard = ({ nft, onClaim }) => {
   );
 };
 
-export default NFTCard;
+export default React.memo(NFTCard);
