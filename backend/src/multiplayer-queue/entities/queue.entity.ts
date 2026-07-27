@@ -17,6 +17,7 @@ export enum SkillLevel {
 @Index(["status", "skillLevel"]) // Index for efficient matchmaking queries
 @Index(["userId"]) // Index for user-specific queries
 @Index(["createdAt"]) // Index for queue ordering
+@Index(["status", "createdAt"]) // Composite index for cron matchmaking scans
 export class Queue {
   @PrimaryGeneratedColumn("uuid")
   id: string

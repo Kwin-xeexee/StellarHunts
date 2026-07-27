@@ -188,6 +188,7 @@ export class MultiplayerQueueService {
     const waitingPlayers = await this.queueRepository.find({
       where: { status: QueueStatus.WAITING },
       order: { createdAt: "ASC" },
+      take: 200,
     })
 
     if (waitingPlayers.length < 2) {

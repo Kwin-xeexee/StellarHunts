@@ -118,6 +118,22 @@ jobs:
         working-directory: onchain
         run: cargo test --workspace --locked
 
+      # ── Resource bench ─────────────────────────────────────────
+      # Bench tests for submit_answer budget (issue #34). Output is
+      # captured as an artifact so budget regressions are visible in
+      # the CI run summary.
+      - name: Run resource bench
+        working-directory: onchain
+        run: cargo test --workspace --locked -- bench_ --nocapture 2>&1 | tee bench-output.txt
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-output
+          path: onchain/bench-output.txt
+          if-no-files-found: warn
+          retention-days: 7
+
   # ─────────────────────────────────────────────────────────────────────
   # Backend CI
   # ─────────────────────────────────────────────────────────────────────

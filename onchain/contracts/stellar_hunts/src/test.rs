@@ -162,3 +162,15 @@ fn test_next_level_logic() {
         crate::Levels::Master
     );
 }
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")]
+fn test_require_admin_not_initialized() {
+    let env = Env::default();
+    env.mock_all_auths();
+    // Register the contract WITHOUT calling init — admin key is unset.
+    let contract_id = env.register_contract(None, StellarHunts);
+    let client = StellarHuntsClient::new(&env, &contract_id);
+    // Calling any admin-gated function should panic with Error::NotInitialized (#6).
+    client.set_question_per_level(&5u32);
+}
