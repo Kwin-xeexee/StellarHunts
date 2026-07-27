@@ -234,15 +234,17 @@ class PuzzleReviewService {
     };
   }
 
-  // Update review status (approve/reject)
-  async updateReviewStatus(reviewId, status, moderationReason = '') {
-    await this.delay();
-    
+  // Synchronous mutation helper. Applies the status change in-place
+  // without simulating the per-request API latency. Shared by
+  // `updateReviewStatus` (single-item path, still awaits `delay()` to
+  // match the original behaviour for individual calls) and the bulk
+  // path so that bulk operations complete in <1ms instead of stacking
+  // an extra `delay()` per item.
+  _applyReviewStatusSync(reviewId, status, moderationReason = '') {
     const reviewIndex = this.reviews.findIndex(r => r.id === reviewId);
     if (reviewIndex === -1) {
-      throw new Error('Review not found');
+      return null;
     }
-    
     const review = this.reviews[reviewIndex];
     review.status = status;
     review.moderationInfo = {
@@ -251,10 +253,21 @@ class PuzzleReviewService {
       moderationReason: moderationReason
     };
     review.updatedAt = new Date().toISOString();
-    
+    return review;
+  }
+
+  // Update review status (approve/reject)
+  async updateReviewStatus(reviewId, status, moderationReason = '') {
+    await this.delay();
+
+    const review = this._applyReviewStatusSync(reviewId, status, moderationReason);
+    if (!review) {
+      throw new Error('Review not found');
+    }
+
     // Update stats
     this.updateStats();
-    
+
     return {
       success: true,
       message: `Review ${status.toLowerCase()} successfully`,
@@ -317,20 +330,35 @@ class PuzzleReviewService {
     };
   }
 
-  // Bulk update review statuses
+  // Bulk update review statuses. The bulk path represents a single
+  // remote round-trip in production, not N independent ones, so we
+  // intentionally do NOT await `this.delay()` here — doing so would
+  // cause a 100-item request to take ~50s (500ms × 100). We also skip
+  // the per-item `updateReviewStatus` call (which itself awaits
+  // `delay()`) and instead use the synchronous helper directly. Stats
+  // are recomputed once at the end. Unknown review IDs are surfaced in
+  // the `skipped` array so callers can detect partial failures.
   async bulkUpdateReviewStatuses(reviewIds, status, moderationReason = '') {
-    await this.delay();
-    
     const updatedReviews = [];
+    const skipped = [];
     for (const reviewId of reviewIds) {
-      const result = await this.updateReviewStatus(reviewId, status, moderationReason);
-      updatedReviews.push(result.data);
+      const review = this._applyReviewStatusSync(reviewId, status, moderationReason);
+      if (review) {
+        updatedReviews.push(review);
+      } else {
+        skipped.push(reviewId);
+      }
     }
-    
+
+    if (updatedReviews.length > 0) {
+      this.updateStats();
+    }
+
     return {
       success: true,
-      message: `${reviewIds.length} reviews ${status.toLowerCase()} successfully`,
-      data: updatedReviews
+      message: `${updatedReviews.length} reviews ${status.toLowerCase()} successfully`,
+      data: updatedReviews,
+      skipped,
     };
   }
 

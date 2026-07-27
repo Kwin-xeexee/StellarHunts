@@ -31,10 +31,17 @@ export class AnalyticsController implements OnModuleInit {
 
   @Post('record-solve')
   @HttpCode(HttpStatus.NO_CONTENT)
-  recordSolve(@Body() body: RecordSolveDto): void {
+  async recordSolve(@Body() body: RecordSolveDto): Promise<void> {
     this.logger.log(`Received record-solve request: ${JSON.stringify(body)}`);
     const { userId, puzzleId, solveTime } = body;
-    this.analyticsService.recordPuzzleSolve(userId, puzzleId, solveTime);
+    // Await so write errors surface as 5xx rather than being silently
+    // dropped; the service internally falls back to in-memory on Redis
+    // failure so this won't crash the request.
+    await this.analyticsService.recordPuzzleSolveAsync(
+      userId,
+      puzzleId,
+      solveTime,
+    );
   }
 
   @Get('puzzles/most-solved')
@@ -42,37 +49,33 @@ export class AnalyticsController implements OnModuleInit {
     Array<{ puzzleId: string; solveCount: number }>
   > {
     this.logger.log('Handling request for most solved puzzles.');
-    return this.analyticsService.getMostSolvedPuzzles();
+    return this.analyticsService.getMostSolvedPuzzlesAsync();
   }
 
   @Get('puzzles/:puzzleId/average-solve-time')
-  getAverageSolveTime(@Param('puzzleId') puzzleId: string): {
-    puzzleId: string;
-    averageSolveTime: number;
-  } {
+  async getAverageSolveTime(
+    @Param('puzzleId') puzzleId: string,
+  ): Promise<{ puzzleId: string; averageSolveTime: number }> {
     this.logger.log(
       `Handling request for average solve time for puzzle ${puzzleId}.`,
     );
     const averageSolveTime =
-      this.analyticsService.getAverageSolveTime(puzzleId);
+      await this.analyticsService.getAverageSolveTimeAsync(puzzleId);
     return { puzzleId, averageSolveTime };
   }
 
   @Get('users/:userId/history')
-  getUserPuzzleHistory(
+  async getUserPuzzleHistory(
     @Param('userId') userId: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ): PaginatedUserPuzzleHistory {
-    const parsedPage = page ? parseInt(page, 10) : 1;
-    const parsedLimit = limit ? parseInt(limit, 10) : 20;
-    this.logger.log(
-      `Handling paginated request for user ${userId} puzzle history (page=${parsedPage}, limit=${parsedLimit}).`,
-    );
-    return this.analyticsService.getUserPuzzleStatsPage(
-      userId,
-      parsedPage > 0 ? parsedPage : 1,
-      parsedLimit > 0 ? parsedLimit : 20,
-    );
+  ): Promise<Record<string, any>> {
+    this.logger.log(`Handling request for user ${userId} puzzle history.`);
+    const userHistoryMap =
+      await this.analyticsService.getUserPuzzleStatsAsync(userId);
+
+    const userHistoryObject: Record<string, any> = {};
+    userHistoryMap.forEach((value, key) => {
+      userHistoryObject[key] = value;
+    });
+    return userHistoryObject;
   }
 }

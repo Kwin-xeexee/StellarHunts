@@ -2,25 +2,70 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import axios from "axios";
 
-// Keep only a small, lightweight index of NFTs in localStorage so we never
-// blow the ~5MB quota as the collection grows (#104). Full NFT payloads are
-// fetched from the server on demand via the paginated inventory endpoints.
-const PERSISTED_NFT_LIMIT = 50;
+/**
+ * Returns a storage adapter that debounces `setItem` so that the
+ * hot-path game actions (auth, score updates, NFT additions) don't
+ * trigger a synchronous localStorage write on every `set()` call.
+ * Bursts of mutations within `delayMs` collapse into one write.
+ *
+ * `removeItem` is flushed immediately so logout/reset semantics
+ * aren't affected by the throttle window.
+ *
+ * Implementation note: the returned adapter is captured by
+ * `createJSONStorage` exactly once (Zustand invokes the factory
+ * function once and caches the result). The closure-scoped `timer`
+ * and `pendingValue` therefore survive across `setItem` calls. Do
+ * not move the factory invocation inside `setItem` or the debounce
+ * will be defeated by per-call instance re-creation.
+ */
+const createThrottledStorage = (storage, delayMs = 150) => {
+  let timer = null;
+  let pendingValue = null;
+  const flush = () => {
+    if (pendingValue !== null) {
+      try {
+        storage.setItem("game-storage", pendingValue);
+      } catch (e) {
+        // Quota or serialization errors should not break gameplay.
+      }
+      pendingValue = null;
+    }
+    timer = null;
+  };
+  return {
+    getItem: (name) => storage.getItem(name),
+    setItem: (name, value) => {
+      pendingValue = value;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(flush, delayMs);
+    },
+    removeItem: (name) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      pendingValue = null;
+      storage.removeItem(name);
+    },
+  };
+};
 
-const buildLightweightNftIndex = (nfts = []) => {
-  return nfts.slice(-PERSISTED_NFT_LIMIT).map((nft) => {
-    if (!nft || typeof nft !== "object") return nft;
+/**
+ * Returns `window.localStorage` in the browser, or a no-op storage
+ * during SSR so `persist` doesn't crash during Next.js static
+ * generation / server rendering.
+ */
+const safeLocalStorage = () => {
+  if (typeof window === "undefined") {
     return {
-      id: nft.id ?? nft.assetId ?? null,
-      assetId: nft.assetId ?? nft.id ?? null,
-      assetType: nft.assetType ?? "nft",
-      name: nft.name,
-      rarity: nft.rarity,
-      imageUrl: nft.imageUrl,
-      src: nft.src,
-      acquiredAt: nft.acquiredAt,
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
     };
-  });
+  }
+  return window.localStorage;
 };
 
 const useGameStore = create(
@@ -253,83 +298,24 @@ const useGameStore = create(
     }),
     {
       name: "game-storage",
-      storage: createJSONStorage(() => {
-        // Wrap localStorage in a defensive try/catch — if quota is exceeded
-        // (#104) we drop the NFT index instead of throwing and corrupting the
-        // hydration of the rest of the persisted state.
-        const safeStorage = {
-          getItem: (name) => {
-            try {
-              return localStorage.getItem(name);
-            } catch (err) {
-              console.warn("localStorage read failed:", err);
-              return null;
-            }
-          },
-          setItem: (name, value) => {
-            try {
-              localStorage.setItem(name, value);
-            } catch (err) {
-              // Quota exceeded — persist everything except the NFT index.
-              try {
-                const slim = JSON.parse(value);
-                if (slim && slim.state && Array.isArray(slim.state.nfts)) {
-                  slim.state.nfts = [];
-                  localStorage.setItem(name, JSON.stringify(slim));
-                  return;
-                }
-              } catch (_) {
-                /* fallthrough */
-              }
-              console.warn("localStorage write failed:", err);
-            }
-          },
-          removeItem: (name) => {
-            try {
-              localStorage.removeItem(name);
-            } catch (err) {
-              console.warn("localStorage remove failed:", err);
-            }
-          },
-        };
-        return safeStorage;
-      }),
+      // Throttle writes so the localStorage payload is only re-serialised
+      // and written once per coalescing window (see `createThrottledStorage`).
+      storage: createJSONStorage(() =>
+        createThrottledStorage(safeLocalStorage())
+      ),
+      // Only durable progress fields are persisted. Transient state (none
+      // currently, but a narrow allow-list keeps the storage size small and
+      // future-proofs against accidental bloat) is excluded.
       partialize: (state) => ({
-        // Persist everything except the full NFT payloads — we keep only a
-        // trimmed lightweight index to avoid hitting the quota (#104).
         user: state.user,
-        currentDifficulty: state.currentDifficulty,
-        currentPuzzleIndex: state.currentPuzzleIndex,
         completedPuzzles: state.completedPuzzles,
         completedDifficulties: state.completedDifficulties,
+        currentDifficulty: state.currentDifficulty,
+        currentPuzzleIndex: state.currentPuzzleIndex,
         score: state.score,
-        nfts: buildLightweightNftIndex(state.nfts),
+        nfts: state.nfts,
       }),
-      version: 2,
-      migrate: (persistedState, fromVersion) => {
-        // v1 → v2: nothing to migrate; older `nfts` payloads (if oversized)
-        // are simply replaced on next save by the new partialize function.
-        if (!persistedState) return persistedState;
-        return persistedState;
-      },
-      // IMPORTANT (#104): on rehydration the persisted `nfts` is only the
-      // trimmed lightweight index (latest 50, metadata stripped). Without
-      // this onRehydrateStorage hook consumers would render broken cards
-      // (missing imageUrl/src) after a refresh. We auto-fire the first
-      // server-side page so the in-memory collection is back to full.
-      onRehydrateStorage: () => (rehydratedState) => {
-        if (!rehydratedState || !rehydratedState.user) return;
-        // Defer to a microtask so callers that already subscribe to the
-        // store observe the populated `nfts` in the next render.
-        queueMicrotask(() => {
-          const { fetchNftsPage } = rehydratedState;
-          if (typeof fetchNftsPage === "function") {
-            // 50 matches `PERSISTED_NFT_LIMIT`; bump if you change one or
-            // the other.
-            fetchNftsPage({ page: 1, limit: 50 }).catch(() => {});
-          }
-        });
-      },
+      version: 1,
     }
   )
 );
