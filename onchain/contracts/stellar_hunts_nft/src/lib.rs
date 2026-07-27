@@ -23,9 +23,17 @@ pub enum NftDataKey {
     Admin,
     Minters(Address),
     Badge(Address, Levels),
+    BadgeData(Address, Levels),
     BaseUri,
     Name,
     Symbol,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct BadgeData {
+    pub minted_at: u64,
+    pub minter: Address,
 }
 
 // ---------------------------------------------------------------------
@@ -101,6 +109,12 @@ impl StellarHuntsNft {
         }
         env.storage().persistent().set(&badge_key, &true);
 
+        let badge_data = BadgeData {
+            minted_at: env.ledger().timestamp(),
+            minter: minter.clone(),
+        };
+        let badge_data_key = NftDataKey::BadgeData(recipient.clone(), level.clone());
+        env.storage().persistent().set(&badge_data_key, &badge_data);
         let admin: Address = env
             .storage()
             .instance()
@@ -117,6 +131,11 @@ impl StellarHuntsNft {
         env.storage()
             .persistent()
             .has(&NftDataKey::Badge(owner, level))
+    }
+
+    pub fn get_badge_data(env: Env, owner: Address, level: Levels) -> Option<BadgeData> {
+        let key = NftDataKey::BadgeData(owner, level);
+        env.storage().persistent().get(&key)
     }
 
     // -----------------------------------------------------------------
