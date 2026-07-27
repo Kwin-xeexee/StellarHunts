@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Logger,
   Query,
+  OnModuleInit,
 } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import type { PaginatedUserPuzzleHistory } from './analytics.service';
@@ -19,12 +20,12 @@ class RecordSolveDto {
 }
 
 @Controller('analytics')
-export class AnalyticsController {
+export class AnalyticsController implements OnModuleInit {
   private readonly logger = new Logger(AnalyticsController.name);
 
-  constructor(private readonly analyticsService: AnalyticsService) {
-    // Seed once on construction so the in-memory stats have something to
-    // show before the first POST /analytics/record-solve request arrives.
+  constructor(private readonly analyticsService: AnalyticsService) {}
+
+  onModuleInit() {
     this.analyticsService.seedData();
   }
 

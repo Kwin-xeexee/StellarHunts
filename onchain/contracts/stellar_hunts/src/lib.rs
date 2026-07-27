@@ -45,6 +45,7 @@ pub struct LevelProgress {
     pub is_completed: bool,
     pub attempts: u32,
     pub nft_minted: bool,
+    pub last_attempt_ledger: u32,
 }
 
 // ---------------------------------------------------------------------
@@ -82,6 +83,8 @@ pub enum Error {
     WrongLevel = 7,
     QuestionPerLevelLimit = 8,
     MissingNftContract = 9,
+    AttemptTooSoon = 10,
+    LevelImmutable = 11,
 }
 
 // ---------------------------------------------------------------------
@@ -325,7 +328,14 @@ impl StellarHunts {
                     is_completed: false,
                     attempts: 0,
                     nft_minted: false,
+                    last_attempt_ledger: 0,
                 });
+
+        let current_ledger = env.ledger().sequence();
+        if lp.last_attempt_ledger == current_ledger {
+            panic_with_error!(&env, Error::AttemptTooSoon);
+        }
+        lp.last_attempt_ledger = current_ledger;
         lp.attempts += 1;
 
         let hashed: BytesN<32> = env.crypto().sha256(&answer).into();
@@ -393,6 +403,25 @@ impl StellarHunts {
 
         if pp.current_level != q.level {
             panic_with_error!(&env, Error::WrongLevel);
+        }
+
+        let lp_key = DataKey::PlayerLevelProgress(caller.clone(), q.level.clone());
+        let lp: LevelProgress = env
+            .storage()
+            .persistent()
+            .get(&lp_key)
+            .unwrap_or(LevelProgress {
+                player: caller.clone(),
+                level: q.level.clone(),
+                last_question_index: 0,
+                is_completed: false,
+                attempts: 0,
+                nft_minted: false,
+                last_attempt_ledger: 0,
+            });
+
+        if lp.attempts == 0 {
+            panic_with_error!(&env, Error::NotInitialized);
         }
 
         env.events().publish(
@@ -520,6 +549,7 @@ impl StellarHunts {
                 is_completed: false,
                 attempts: 0,
                 nft_minted: false,
+                last_attempt_ledger: 0,
             })
     }
 
@@ -548,6 +578,7 @@ impl StellarHunts {
             is_completed: false,
             attempts: 0,
             nft_minted: false,
+            last_attempt_ledger: 0,
         };
         env.storage().persistent().set(
             &DataKey::PlayerLevelProgress(player.clone(), Levels::Easy),
