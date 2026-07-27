@@ -10,6 +10,8 @@ import {
 import { Exclude } from "class-transformer"
 import * as bcrypt from "bcrypt"
 
+const BCRYPT_SALT_ROUNDS = 12
+
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn("uuid")
@@ -44,8 +46,7 @@ export class User {
   @BeforeInsert()
   async hashPasswordBeforeInsert() {
     if (this.password) {
-      const saltRounds = 12
-      this.password = await bcrypt.hash(this.password, saltRounds)
+      this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS)
     }
   }
 
@@ -53,8 +54,7 @@ export class User {
   async hashPasswordBeforeUpdate() {
     // Only hash if password has been modified
     if (this.password && !this.password.startsWith("$2b$")) {
-      const saltRounds = 12
-      this.password = await bcrypt.hash(this.password, saltRounds)
+      this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS)
     }
   }
 
