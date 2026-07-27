@@ -45,6 +45,7 @@ pub struct LevelProgress {
     pub is_completed: bool,
     pub attempts: u32,
     pub nft_minted: bool,
+    pub last_attempt_ledger: u32,
 }
 
 // ---------------------------------------------------------------------
@@ -82,6 +83,8 @@ pub enum Error {
     WrongLevel = 7,
     QuestionPerLevelLimit = 8,
     MissingNftContract = 9,
+    AttemptTooSoon = 10,
+    LevelImmutable = 11,
 }
 
 // ---------------------------------------------------------------------
@@ -139,14 +142,14 @@ impl StellarHunts {
             .storage()
             .instance()
             .get(&DataKey::QuestionPerLevel)
-            .unwrap_or(0u32);
+            .unwrap_or(5u32);
         let idx: u32 = env
             .storage()
             .persistent()
             .get(&DataKey::QuestionPerLevelIndex(level.clone()))
             .unwrap_or(0u32);
 
-        if per_level == 0 || idx >= per_level {
+        if idx >= per_level {
             panic_with_error!(&env, Error::QuestionPerLevelLimit);
         }
 
@@ -166,7 +169,7 @@ impl StellarHunts {
         question_id: u64,
         question: Bytes,
         answer: Bytes,
-        _level: Levels,
+        level: Levels,
         hint: Bytes,
     ) {
         require_admin(&env);
@@ -186,19 +189,85 @@ impl StellarHunts {
             .ok_or(Error::QuestionNotFound)
             .unwrap();
 
+        let old_level = existing.level.clone();
+
+        if old_level != level {
+            let per_level: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestionPerLevel)
+                .unwrap_or(0u32);
+            if per_level == 0 {
+                panic_with_error!(&env, Error::QuestionPerLevelLimit);
+            }
+
+            let old_idx = env
+                .storage()
+                .persistent()
+                .get::<DataKey, u32>(&DataKey::QuestionPerLevelIndex(old_level.clone()))
+                .unwrap_or(0u32);
+
+            let new_idx: u32 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::QuestionPerLevelIndex(level.clone()))
+                .unwrap_or(0u32);
+
+            if new_idx >= per_level {
+                panic_with_error!(&env, Error::QuestionPerLevelLimit);
+            }
+
+            env.storage()
+                .persistent()
+                .set(&DataKey::QuestionsByLevel(level.clone(), new_idx), &question_id);
+            env.storage()
+                .persistent()
+                .set(&DataKey::QuestionPerLevelIndex(level.clone()), &(new_idx + 1));
+
+            let last_old_idx = old_idx - 1;
+            for i in 0..old_idx {
+                let qid: u64 = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::QuestionsByLevel(old_level.clone(), i))
+                    .unwrap_or(0u64);
+                if qid == question_id {
+                    for j in i..last_old_idx {
+                        let next_qid: u64 = env
+                            .storage()
+                            .persistent()
+                            .get(&DataKey::QuestionsByLevel(old_level.clone(), j + 1))
+                            .unwrap_or(0u64);
+                        env.storage().persistent().set(
+                            &DataKey::QuestionsByLevel(old_level.clone(), j),
+                            &next_qid,
+                        );
+                    }
+                    env.storage().persistent().remove(
+                        &DataKey::QuestionsByLevel(old_level.clone(), last_old_idx),
+                    );
+                    break;
+                }
+            }
+            env.storage().persistent().set(
+                &DataKey::QuestionPerLevelIndex(old_level.clone()),
+                &last_old_idx,
+            );
+        }
+
         let hashed: BytesN<32> = env.crypto().sha256(&answer).into();
         let updated = Question {
             question_id,
             question,
             hashed_answer: hashed,
-            level: existing.level.clone(),
+            level: level.clone(),
             hint,
         };
         env.storage().persistent().set(&existing_key, &updated);
 
         env.events().publish(
             (Symbol::new(&env, "question_updated"),),
-            (question_id, existing.level),
+            (question_id, level),
         );
     }
 
@@ -259,7 +328,14 @@ impl StellarHunts {
                     is_completed: false,
                     attempts: 0,
                     nft_minted: false,
+                    last_attempt_ledger: 0,
                 });
+
+        let current_ledger = env.ledger().sequence();
+        if lp.last_attempt_ledger == current_ledger {
+            panic_with_error!(&env, Error::AttemptTooSoon);
+        }
+        lp.last_attempt_ledger = current_ledger;
         lp.attempts += 1;
 
         let hashed: BytesN<32> = env.crypto().sha256(&answer).into();
@@ -271,10 +347,7 @@ impl StellarHunts {
                 .storage()
                 .instance()
                 .get(&DataKey::QuestionPerLevel)
-                .unwrap_or(0u32);
-            if per_level == 0 {
-                panic_with_error!(&env, Error::QuestionPerLevelLimit);
-            }
+                .unwrap_or(5u32);
             if lp.last_question_index >= per_level {
                 lp.is_completed = true;
                 let next = question.level.next();
@@ -330,6 +403,25 @@ impl StellarHunts {
 
         if pp.current_level != q.level {
             panic_with_error!(&env, Error::WrongLevel);
+        }
+
+        let lp_key = DataKey::PlayerLevelProgress(caller.clone(), q.level.clone());
+        let lp: LevelProgress = env
+            .storage()
+            .persistent()
+            .get(&lp_key)
+            .unwrap_or(LevelProgress {
+                player: caller.clone(),
+                level: q.level.clone(),
+                last_question_index: 0,
+                is_completed: false,
+                attempts: 0,
+                nft_minted: false,
+                last_attempt_ledger: 0,
+            });
+
+        if lp.attempts == 0 {
+            panic_with_error!(&env, Error::NotInitialized);
         }
 
         env.events().publish(
@@ -457,6 +549,7 @@ impl StellarHunts {
                 is_completed: false,
                 attempts: 0,
                 nft_minted: false,
+                last_attempt_ledger: 0,
             })
     }
 
@@ -485,6 +578,7 @@ impl StellarHunts {
             is_completed: false,
             attempts: 0,
             nft_minted: false,
+            last_attempt_ledger: 0,
         };
         env.storage().persistent().set(
             &DataKey::PlayerLevelProgress(player.clone(), Levels::Easy),
@@ -507,9 +601,11 @@ fn require_admin(env: &Env) {
         .storage()
         .instance()
         .get(&DataKey::Admin)
-        .expect("admin not set");
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
     admin.require_auth();
 }
 
+#[cfg(test)]
+mod bench;
 #[cfg(test)]
 mod test;

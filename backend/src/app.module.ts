@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as Joi from 'joi';
 
 import appConfig from 'config/app.config';
 import databaseConfig from 'config/database.config';
@@ -16,20 +17,27 @@ import { AppService } from './app.service';
 import { ActivityModule } from './activity/activity.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ApiKeyModule } from './api-key/api-key.module';
+import { AuthModule } from './auth/auth.module';
 import { ContentModule } from './content/content.module';
 import { ContentRatingModule } from './content-rating/content-rating.module';
+import { HintModule } from './hint/hint.module';
 import { InAppNotificationsModule } from './in-app-notifications/in-app-notifications.module';
 import { MultiplayerQueueModule } from './multiplayer-queue/multiplayer-queue.module';
 import { NFTClaimModule } from './nft-claim/nft-claim.module';
 import { ProgressModule } from './progress/progress.module';
+import { PuzzleCategoryModule } from './puzzle-category/puzzle-category.module';
 import { PuzzleDependencyModule } from './puzzle-dependency/puzzle-dependency.module';
 import { PuzzleModule } from './puzzle/puzzle.module';
 import { PuzzleSubmissionModule } from './puzzle-submission/puzzle-submission.module';
 import { PuzzleTranslationModule } from './puzzle-translation/puzzle-translation.module';
+import { ReferralModule } from './referral/referral.module';
 import { ReportsModule } from './reports/reports.module';
 import { RewardShopModule } from './reward-shop/reward-shop.module';
+import { RewardsModule } from './rewards/rewards.module';
+import { StreakModule } from './streak/streak.module';
 import { TimeTrialModule } from './time-trial/time-trial.module';
 import { UserActivityLogModule } from './user-activity-log/user-activity-log.module';
+import { UserInventoryModule } from './user-inventory/user-inventory.module';
 import { UserRankingModule } from './user-ranking/user-ranking.module';
 import { UserReactionModule } from './user-reaction/user-reaction.module';
 import { UserReportCardModule } from './user-report-card/user-report-card.module';
@@ -41,6 +49,14 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
       envFilePath: ['.env'],
       load: [appConfig, databaseConfig],
       cache: true,
+      validationSchema: Joi.object({
+        JWT_SECRET: Joi.string().required(),
+        DATABASE_HOST: Joi.string().required(),
+        DATABASE_PORT: Joi.number().default(5432),
+        DATABASE_USER: Joi.string().required(),
+        DATABASE_PASSWORD: Joi.string().required(),
+        DATABASE_NAME: Joi.string().required(),
+      }),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -60,20 +76,27 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
     ActivityModule,
     AnalyticsModule,
     ApiKeyModule,
+    AuthModule,
     ContentModule,
     ContentRatingModule,
+    HintModule,
     InAppNotificationsModule,
     MultiplayerQueueModule,
     NFTClaimModule,
     ProgressModule,
+    PuzzleCategoryModule,
     PuzzleDependencyModule,
     PuzzleModule,
     PuzzleSubmissionModule,
     PuzzleTranslationModule,
+    ReferralModule,
     ReportsModule,
     RewardShopModule,
+    RewardsModule,
+    StreakModule,
     TimeTrialModule,
     UserActivityLogModule,
+    UserInventoryModule,
     UserRankingModule,
     UserReactionModule,
     UserReportCardModule,
