@@ -19,6 +19,17 @@ interface UserPuzzleEngagement {
   lastSolved?: Date;
 }
 
+export interface PaginatedUserPuzzleHistory {
+  items: Record<string, UserPuzzleEngagement>;
+  total: number;
+  page: number;
+  limit: number;
+}
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
 const PUZZLE_KEY = (puzzleId: string) => `analytics:puzzle:${puzzleId}`;
 const USER_PUZZLE_KEY = (userId: string, puzzleId: string) =>
   `analytics:user:${userId}:puzzle:${puzzleId}`;
@@ -121,11 +132,7 @@ export class AnalyticsService {
    * fans out the write fire-and-forget so a configured Redis still
    * receives solves from non-awaiting callers.
    */
-  recordPuzzleSolve(
-    userId: string,
-    puzzleId: string,
-    solveTime: number,
-  ): void {
+  recordPuzzleSolve(userId: string, puzzleId: string, solveTime: number): void {
     this.logger.log(
       `Recording solve: User ${userId}, Puzzle ${puzzleId}, Time ${solveTime}`,
     );
@@ -232,7 +239,7 @@ export class AnalyticsService {
    */
   getMostSolvedPuzzles(
     limit?: number,
-  ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
+  ): Array<{ puzzleId: string; solveCount: number }> {
     this.logger.log('Fetching most solved puzzles...');
     const sortedPuzzles = Array.from(this.puzzleStats.entries())
       .map(([puzzleId, stats]) => ({
@@ -276,6 +283,91 @@ export class AnalyticsService {
     }
   }
 
+  /**
+   * Synchronous read of a single user's full history from the in-memory
+   * mirror only. Kept for existing callers; not paginated.
+   */
+  getUserPuzzleStats(userId: string): Map<string, UserPuzzleEngagement> {
+    this.logger.log(`Fetching puzzle history for user ${userId}...`);
+    return (
+      this.userPuzzleHistory.get(userId) ||
+      new Map<string, UserPuzzleEngagement>()
+    );
+  }
+
+  /**
+   * Async read of a single user's full history. Redis-authoritative when
+   * configured, falling back to the in-memory mirror on failure.
+   */
+  async getUserPuzzleStatsAsync(
+    userId: string,
+  ): Promise<Map<string, UserPuzzleEngagement>> {
+    if (!this.usingRedis || !this.redis) {
+      return this.getUserPuzzleStats(userId);
+    }
+    try {
+      const ids = await this.redis.smembers(userPuzzleIndexKey(userId));
+      const entries = await Promise.all(
+        ids.map(async (puzzleId) => {
+          const raw = await this.redis!.hgetall(
+            USER_PUZZLE_KEY(userId, puzzleId),
+          );
+          return [puzzleId, parseUserPuzzleStats(raw ?? {})] as const;
+        }),
+      );
+      return new Map(entries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Redis read failed for analytics (falling back to in-memory): ${message}`,
+      );
+      return this.getUserPuzzleStats(userId);
+    }
+  }
+
+  /**
+   * Paginated view of a user's puzzle history, sorted by most recently
+   * solved first. Built on top of `getUserPuzzleStatsAsync` so it shares
+   * the same Redis-first / in-memory-fallback semantics rather than
+   * duplicating the read path.
+   *
+   * `page` is 1-indexed. `limit` is clamped to [1, MAX_LIMIT] to prevent
+   * a caller from requesting the entire history in one shot.
+   */
+  async getUserPuzzleHistoryPaginated(
+    userId: string,
+    page: number = DEFAULT_PAGE,
+    limit: number = DEFAULT_LIMIT,
+  ): Promise<PaginatedUserPuzzleHistory> {
+    const safePage =
+      Number.isFinite(page) && page > 0 ? Math.floor(page) : DEFAULT_PAGE;
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0
+        ? Math.min(Math.floor(limit), MAX_LIMIT)
+        : DEFAULT_LIMIT;
+
+    const fullHistory = await this.getUserPuzzleStatsAsync(userId);
+
+    const sortedEntries = Array.from(fullHistory.entries()).sort(
+      ([, a], [, b]) => {
+        const aTime = a.lastSolved ? a.lastSolved.getTime() : 0;
+        const bTime = b.lastSolved ? b.lastSolved.getTime() : 0;
+        return bTime - aTime; // most recent first
+      },
+    );
+
+    const total = sortedEntries.length;
+    const start = (safePage - 1) * safeLimit;
+    const pageEntries = sortedEntries.slice(start, start + safeLimit);
+
+    const items: Record<string, UserPuzzleEngagement> = {};
+    for (const [puzzleId, stats] of pageEntries) {
+      items[puzzleId] = stats;
+    }
+
+    return { items, total, page: safePage, limit: safeLimit };
+  }
+
   getAverageSolveTime(puzzleId: string): number {
     this.logger.log(`Fetching average solve time for puzzle ${puzzleId}...`);
     const stats = this.puzzleStats.get(puzzleId);
@@ -300,40 +392,6 @@ export class AnalyticsService {
         `Redis read failed for analytics (falling back to in-memory): ${message}`,
       );
       return this.getAverageSolveTime(puzzleId);
-    }
-  }
-
-  getUserPuzzleStats(userId: string): Map<string, UserPuzzleEngagement> {
-    this.logger.log(`Fetching puzzle history for user ${userId}...`);
-    return (
-      this.userPuzzleHistory.get(userId) ||
-      new Map<string, UserPuzzleEngagement>()
-    );
-  }
-
-  async getUserPuzzleStatsAsync(
-    userId: string,
-  ): Promise<Map<string, UserPuzzleEngagement>> {
-    if (!this.usingRedis || !this.redis) {
-      return this.getUserPuzzleStats(userId);
-    }
-    try {
-      const ids = await this.redis.smembers(userPuzzleIndexKey(userId));
-      const entries = await Promise.all(
-        ids.map(async (puzzleId) => {
-          const raw = await this.redis!.hgetall(
-            USER_PUZZLE_KEY(userId, puzzleId),
-          );
-          return [puzzleId, parseUserPuzzleStats(raw ?? {})] as const;
-        }),
-      );
-      return new Map(entries);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Redis read failed for analytics (falling back to in-memory): ${message}`,
-      );
-      return this.getUserPuzzleStats(userId);
     }
   }
 
