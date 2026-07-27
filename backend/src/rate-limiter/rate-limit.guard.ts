@@ -32,6 +32,7 @@ export class RateLimitGuard implements CanActivate {
     const userId = request.user?.id;
     const key = userId
       ? `rate:${userId}:${ip}:${context.getHandler().name}`
+      ? `rate:${userId}:${context.getHandler().name}`
       : `rate:${ip}:${context.getHandler().name}`;
 
     const isLimited = this.rateLimiterService.isRateLimited(
