@@ -90,6 +90,7 @@ impl StellarHuntsNft {
     /// game contract passes its own contract address as `minter`.
     pub fn mint_level_badge(env: Env, minter: Address, recipient: Address, level: Levels) {
         minter.require_auth();
+
         if !Self::has_minter_role(env.clone(), minter.clone()) {
             panic_with_error!(&env, Error::NotAuthorized);
         }
@@ -100,9 +101,15 @@ impl StellarHuntsNft {
         }
         env.storage().persistent().set(&badge_key, &true);
 
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&NftDataKey::Admin)
+            .expect("admin not set");
+
         env.events().publish(
             (Symbol::new(&env, "level_badge_minted"),),
-            (recipient, level, minter),
+            (recipient, level, minter, admin),
         );
     }
 

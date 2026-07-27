@@ -64,10 +64,7 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: configService.get<string[]>(
       'appConfig.cors.allowedHeaders',
     ) ?? [
-      'Origin',
-      'X-Requested-With',
       'Content-Type',
-      'Accept',
       'Authorization',
     ],
     credentials:
