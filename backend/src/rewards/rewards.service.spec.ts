@@ -61,7 +61,7 @@ describe('RewardsService', () => {
         description: 'Test Description',
         type: RewardType.BADGE,
         challengeId: 'challenge-001',
-        metadata: { imageUrl: 'test.jpg' },
+        metadata: { imageUrl: 'https://example.com/test.jpg' },
         isActive: true,
         maxClaims: 100,
       };
