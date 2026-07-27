@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common"
+import { type Repository, MoreThan, DataSource } from "typeorm"
 import { type Repository, LessThan, MoreThan } from "typeorm"
 import { Cron, CronExpression } from "@nestjs/schedule"
 import { type Queue, QueueStatus, SkillLevel } from "./entities/queue.entity"
 import type { Match } from "./entities/match.entity"
+import { Match as MatchEntity } from "./entities/match.entity"
 import type { JoinQueueDto } from "./dto/join-queue.dto"
 import type { QueueStatusDto } from "./dto/queue-status.dto"
 import type { MatchResultDto } from "./dto/match-result.dto"
@@ -15,6 +17,7 @@ export class MultiplayerQueueService {
   constructor(
     private readonly queueRepository: Repository<Queue>,
     private readonly matchRepository: Repository<Match>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -232,7 +235,9 @@ export class MultiplayerQueueService {
   }
 
   /**
-   * Create a match between players
+   * Create a match between players inside a transactional boundary so that
+   * an interrupt (crash / network error) after saving the match but before
+   * updating queue entries does not leave partial state.
    */
   private async createMatch(players: Queue[]): Promise<Match> {
     if (players.length < 2) {
@@ -245,28 +250,30 @@ export class MultiplayerQueueService {
       return null
     }
 
-    const match = this.matchRepository.create({
-      playerIds: players.map((p) => p.userId),
-      playerUsernames: players.map((p) => p.username),
-      gameMode: players[0].gameMode,
-      skillLevel: players[0].skillLevel,
-      averageWaitTime: Math.floor(players.reduce((sum, p) => sum + p.waitTime, 0) / players.length),
+    return this.dataSource.transaction(async (manager) => {
+      const match = manager.create(MatchEntity, {
+        playerIds: players.map((p) => p.userId),
+        playerUsernames: players.map((p) => p.username),
+        gameMode: players[0].gameMode,
+        skillLevel: players[0].skillLevel,
+        averageWaitTime: Math.floor(players.reduce((sum, p) => sum + p.waitTime, 0) / players.length),
+      })
+
+      const savedMatch = await manager.save(match)
+
+      // Update queue entries within the same transaction
+      for (const player of players) {
+        player.status = QueueStatus.MATCHED
+        player.matchId = savedMatch.id
+        player.matchedAt = new Date()
+      }
+
+      await manager.save(players)
+
+      this.logger.log(`Created match ${savedMatch.id} with players: ${players.map((p) => p.username).join(", ")}`)
+
+      return savedMatch
     })
-
-    const savedMatch = await this.matchRepository.save(match)
-
-    // Update queue entries
-    for (const player of players) {
-      player.status = QueueStatus.MATCHED
-      player.matchId = savedMatch.id
-      player.matchedAt = new Date()
-    }
-
-    await this.queueRepository.save(players)
-
-    this.logger.log(`Created match ${savedMatch.id} with players: ${players.map((p) => p.username).join(", ")}`)
-
-    return savedMatch
   }
 
   /**

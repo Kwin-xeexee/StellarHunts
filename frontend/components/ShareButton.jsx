@@ -3,6 +3,13 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Share2 } from "lucide-react";
 
+// Always share the canonical home/referral URL to prevent
+// leaking puzzle IDs or internal routes via window.location.href.
+const SHARE_URL =
+  process.env.NEXT_PUBLIC_SHARE_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "https://stellarhunts.com";
+
 const ShareButton = () => {
   const handleShare = async () => {
     const shareMessage =
@@ -13,16 +20,16 @@ const ShareButton = () => {
         await navigator.share({
           title: "StellarHunts",
           text: shareMessage,
-          url: window.location.href,
+          url: SHARE_URL,
         });
       } catch (err) {
         navigator.clipboard.writeText(
-          `${shareMessage}\n${window.location.href}`
+          `${shareMessage}\n${SHARE_URL}`
         );
         alert("Share link copied to clipboard!");
       }
     } else {
-      navigator.clipboard.writeText(`${shareMessage}\n${window.location.href}`);
+      navigator.clipboard.writeText(`${shareMessage}\n${SHARE_URL}`);
       alert("Share link copied to clipboard!");
     }
   };
