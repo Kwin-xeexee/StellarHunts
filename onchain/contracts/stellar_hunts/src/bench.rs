@@ -44,14 +44,14 @@ fn bench_submit_answer_cpu_budget() {
     let player = Address::generate(&env);
 
     // Reset the budget so we only measure the submit_answer call itself.
-    let budget = env.budget();
+    let mut budget = env.budget();
     budget.reset_default();
 
     let ok = client.submit_answer(&player, &1u64, &answer);
     assert!(ok);
 
-    let cpu = budget.cpu_instruction_count();
-    let mem = budget.mem_bytes_count();
+    let cpu = budget.cpu_instruction_cost();
+    let mem = budget.memory_bytes_cost();
 
     // Log diagnostics when run with --nocapture.
     eprintln!(
@@ -101,7 +101,7 @@ fn bench_ten_submit_answers_amortised() {
     }
 
     let player = Address::generate(&env);
-    let budget = env.budget();
+    let mut budget = env.budget();
     budget.reset_default();
 
     for i in 0..per_level {
@@ -110,7 +110,7 @@ fn bench_ten_submit_answers_amortised() {
         assert!(ok);
     }
 
-    let total_cpu = budget.cpu_instruction_count();
+    let total_cpu = budget.cpu_instruction_cost();
     let avg_cpu = total_cpu / (per_level as u64);
 
     eprintln!(
