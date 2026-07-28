@@ -7,8 +7,16 @@ import {
   Unique,
 } from 'typeorm';
 
-@Entity()
-@Unique(['puzzleId', 'userId']) // Prevent duplicate reports
+export enum ReportStatus {
+  OPEN = 'OPEN',
+  TRIAGED = 'TRIAGED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+  REJECTED = 'REJECTED',
+}
+
+@Entity('reports')
+@Unique(['puzzleId', 'userId'])
 export class Report {
   @PrimaryGeneratedColumn()
   id: number;
@@ -22,8 +30,18 @@ export class Report {
   @Column()
   message: string;
 
-  @Column({ default: false })
-  resolved: boolean;
+  @Column({
+    type: 'enum',
+    enum: ReportStatus,
+    default: ReportStatus.OPEN,
+  })
+  status: ReportStatus;
+
+  @Column({ nullable: true })
+  assignedTo?: string;
+
+  @Column({ nullable: true })
+  adminNote?: string;
 
   @CreateDateColumn()
   createdAt: Date;
