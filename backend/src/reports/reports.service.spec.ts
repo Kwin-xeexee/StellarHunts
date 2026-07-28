@@ -1,88 +1,68 @@
-import {
-  Injectable,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Report } from './entities/report.entity';
+import { ReportsService } from './reports.service';
+import { Report, ReportStatus } from './entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
-import { UpdateReportDto } from './dto/update-report.dto';
 
-@Injectable()
-export class ReportsService {
-  constructor(
-    @InjectRepository(Report)
-    private readonly reportRepository: Repository<Report>,
-  ) {}
+describe('ReportsService', () => {
+  let service: ReportsService;
+  let repository: jest.Mocked<Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>>;
 
-  /**
-   * Create a new report
-   */
-  async create(createReportDto: CreateReportDto, userId: number) {
-    const existingReport = await this.reportRepository.findOne({
-      where: {
-        userId,
-        puzzleId: createReportDto.puzzleId,
-      },
+  beforeEach(async () => {
+    repository = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+      find: jest.fn(),
+    } as unknown as jest.Mocked<Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>>;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        {
+          provide: getRepositoryToken(Report),
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    service = module.get<ReportsService>(ReportsService);
+  });
+
+  it('creates a report with an OPEN status by default', async () => {
+    const dto: CreateReportDto = { puzzleId: 7, message: 'Inappropriate content' };
+    const expected = {
+      id: 1,
+      puzzleId: 7,
+      userId: 42,
+      message: 'Inappropriate content',
+      status: ReportStatus.OPEN,
+    } as Report;
+
+    (repository.create as jest.Mock).mockReturnValue(expected);
+    (repository.save as jest.Mock).mockResolvedValue(expected);
+
+    await expect(service.create(dto, 42)).resolves.toEqual(expected);
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        puzzleId: 7,
+        userId: 42,
+        status: ReportStatus.OPEN,
+        message: 'Inappropriate content',
+      }),
+    );
+  });
+
+  it('resolves a report when requested by an admin', async () => {
+    const existing = { id: 2, status: ReportStatus.OPEN } as Report;
+    const resolved = { ...existing, status: ReportStatus.RESOLVED } as Report;
+
+    (repository.findOne as jest.Mock).mockResolvedValue(existing);
+    (repository.save as jest.Mock).mockResolvedValue(resolved);
+
+    await expect(service.resolve(2, 'Resolved after review')).resolves.toMatchObject({
+      status: ReportStatus.RESOLVED,
     });
-
-    if (existingReport) {
-      throw new BadRequestException(
-        'You have already reported this puzzle. Thank you!',
-      );
-    }
-
-    const report = this.reportRepository.create({
-      ...createReportDto,
-      userId,
-      resolved: false,
-    });
-
-    return this.reportRepository.save(report);
-  }
-
-  /**
-   * Admin-only: Get all reports
-   */
-  async findAll() {
-    return this.reportRepository.find({
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  /**
-   * Admin-only: Update a report
-   */
-  async update(id: number, updateDto: UpdateReportDto) {
-    const report = await this.reportRepository.findOne({ where: { id } });
-
-    if (!report) {
-      throw new NotFoundException('Report not found');
-    }
-
-    Object.assign(report, updateDto);
-
-    return this.reportRepository.save(report);
-  }
-
-  /**
-   * Optional: Get reports by user
-   */
-  async findByUser(userId: number) {
-    return this.reportRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  /**
-   * Optional: Get unresolved reports
-   */
-  async findUnresolved() {
-    return this.reportRepository.find({
-      where: { resolved: false },
-      order: { createdAt: 'DESC' },
-    });
-  }
-}
+  });
+});
