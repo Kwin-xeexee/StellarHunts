@@ -112,36 +112,22 @@ docs(api): document rewards claim endpoint
 - **Authorization**: Use `require_auth()` on top-level callers; rely on `env.invoker()` to gate cross-contract calls
 - **Testing**: Write `#[test]` cases for all contract methods using `Env::default()` and `env.mock_all_auths()`
 
-## Testing
+### Testing Strategies & Watch Mode Guide
 
 All changes should include appropriate tests. Run the relevant test suite before submitting a PR.
 
-### Backend Tests
+#### Watch Mode & Path Filtering
+When working on specific modules, run Jest in watch mode or filter by file path to speed up iteration:
 
 ```bash
-# Unit tests
-cd backend && npm test
+# Filter backend tests by path pattern
+cd backend && npm test -- --testPathPattern=auth
 
-# Watch mode
-npm run test:watch
+# Watch mode for a specific test file
+cd backend && npm run test:watch -- src/auth/auth.service.spec.ts
 
-# With coverage
-npm run test:cov
-
-# E2E tests
-npm run test:e2e
-```
-
-### Frontend Tests
-
-The frontend uses [Vitest](https://vitest.dev/) with [Testing Library](https://testing-library.com/react) for unit tests.
-
-```bash
-# Run the test suite
-cd frontend && npm test
-
-# Watch mode (re-runs on file changes)
-cd frontend && npm run test:watch
+# Filter frontend Vitest tests by filename
+cd frontend && npm test -- puzzleReviewService
 ```
 
 Tests live in `frontend/tests/` and use `.test.js` (or `.test.jsx`) extensions.
