@@ -10,6 +10,7 @@ import { User } from './auth/entities/user.entity';
 import { TimeTrial } from './time-trial/time-trial.entity';
 import { Puzzle } from './puzzle/puzzle.entity';
 import { Category } from './puzzle-category/entities/category.entity';
+import { Report } from './reports/entities/report.entity';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -68,7 +69,7 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
         username: configService.get('database.user'),
         password: configService.get('database.password'),
         database: configService.get('database.name'),
-        entities: [User, TimeTrial, Puzzle, Category],
+        entities: [User, TimeTrial, Puzzle, Category, Report],
         synchronize: configService.get('database.synchronize'),
         autoLoadEntities: configService.get('database.autoload'),
       }),
