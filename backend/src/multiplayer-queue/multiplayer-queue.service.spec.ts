@@ -202,6 +202,196 @@ describe("MultiplayerQueueService", () => {
     })
   })
 
+  // ── graph-based matching algorithm ────────────────────────────────
+  describe("computeCompatibilityScore", () => {
+    function score(a: Queue, b: Queue): number {
+      return (service as any).computeCompatibilityScore(a, b)
+    }
+
+    function makePlayer(userId: string, avoid?: string[], prefer?: string[]): Queue {
+      return {
+        id: `id-${userId}`,
+        userId,
+        username: `user-${userId}`,
+        status: QueueStatus.WAITING,
+        skillLevel: SkillLevel.BEGINNER,
+        gameMode: "classic",
+        waitTime: 0,
+        matchId: null,
+        preferences: {
+          avoidOpponents: avoid,
+          preferredOpponents: prefer,
+        },
+        createdAt: new Date(),
+        matchedAt: null,
+        leftAt: null,
+      } as Queue
+    }
+
+    it("returns -1 when a avoids b", () => {
+      const a = makePlayer("u1", ["u2"])
+      const b = makePlayer("u2")
+      expect(score(a, b)).toBe(-1)
+    })
+
+    it("returns -1 when b avoids a", () => {
+      const a = makePlayer("u1")
+      const b = makePlayer("u2", ["u1"])
+      expect(score(a, b)).toBe(-1)
+    })
+
+    it("returns -1 when both avoid each other", () => {
+      const a = makePlayer("u1", ["u2"])
+      const b = makePlayer("u2", ["u1"])
+      expect(score(a, b)).toBe(-1)
+    })
+
+    it("returns 100 for mutual preferredOpponents", () => {
+      const a = makePlayer("u1", undefined, ["u2"])
+      const b = makePlayer("u2", undefined, ["u1"])
+      expect(score(a, b)).toBe(100)
+    })
+
+    it("returns 50 for one-sided preferredOpponents", () => {
+      const a = makePlayer("u1", undefined, ["u2"])
+      const b = makePlayer("u2")
+      expect(score(a, b)).toBe(50)
+    })
+
+    it("returns 10 for neutral (no preferences)", () => {
+      const a = makePlayer("u1")
+      const b = makePlayer("u2")
+      expect(score(a, b)).toBe(10)
+    })
+
+    it("returns 10 when preferences are undefined", () => {
+      const a = makePlayer("u1")
+      a.preferences = undefined as any
+      const b = makePlayer("u2")
+      b.preferences = undefined as any
+      expect(score(a, b)).toBe(10)
+    })
+  })
+
+  describe("pairPlayersInGroup", () => {
+    function pairPlayers(players: Queue[]): [Queue, Queue][] {
+      return (service as any).pairPlayersInGroup(players)
+    }
+
+    function makePlayer(userId: string, avoid?: string[], prefer?: string[]): Queue {
+      return {
+        id: `id-${userId}`,
+        userId,
+        username: `user-${userId}`,
+        status: QueueStatus.WAITING,
+        skillLevel: SkillLevel.BEGINNER,
+        gameMode: "classic",
+        waitTime: 0,
+        matchId: null,
+        preferences: {
+          avoidOpponents: avoid,
+          preferredOpponents: prefer,
+        },
+        createdAt: new Date(),
+        matchedAt: null,
+        leftAt: null,
+      } as Queue
+    }
+
+    it("returns empty array for less than 2 players", () => {
+      expect(pairPlayers([makePlayer("u1")])).toEqual([])
+      expect(pairPlayers([])).toEqual([])
+    })
+
+    it("pairs exactly 2 players", () => {
+      const a = makePlayer("u1")
+      const b = makePlayer("u2")
+      const pairs = pairPlayers([a, b])
+      expect(pairs).toHaveLength(1)
+      expect(pairs[0]).toContain(a)
+      expect(pairs[0]).toContain(b)
+    })
+
+    it("pairs 4 players into 2 pairs", () => {
+      const players = [
+        makePlayer("u1"),
+        makePlayer("u2"),
+        makePlayer("u3"),
+        makePlayer("u4"),
+      ]
+      const pairs = pairPlayers(players)
+      expect(pairs).toHaveLength(2)
+      // All 4 players should be in exactly one pair
+      const pairedIds = pairs.flat().map((p) => p.userId).sort()
+      expect(pairedIds).toEqual(["u1", "u2", "u3", "u4"])
+    })
+
+    it("handles odd number of players (leaves one unmatched)", () => {
+      const players = [
+        makePlayer("u1"),
+        makePlayer("u2"),
+        makePlayer("u3"),
+      ]
+      const pairs = pairPlayers(players)
+      expect(pairs).toHaveLength(1)
+      // One player remains unmatched (that's fine for the next cron cycle)
+      const pairedIds = pairs.flat().map((p) => p.userId)
+      expect(pairedIds).toHaveLength(2)
+    })
+
+    it("never pairs a player with someone they avoid", () => {
+      const players = [
+        makePlayer("u1", ["u2"]),
+        makePlayer("u2"),
+        makePlayer("u3"),
+        makePlayer("u4"),
+      ]
+      const pairs = pairPlayers(players)
+      // u1 cannot pair with u2, so u1 must pair with u3 or u4
+      for (const [a, b] of pairs) {
+        expect(a.userId === "u1" && b.userId === "u2").toBe(false)
+        expect(a.userId === "u2" && b.userId === "u1").toBe(false)
+      }
+    })
+
+    it("prefers mutual preferredOpponents over others", () => {
+      const players = [
+        makePlayer("u1", undefined, ["u2"]),
+        makePlayer("u2", undefined, ["u1"]),
+        makePlayer("u3"),
+        makePlayer("u4"),
+      ]
+      const pairs = pairPlayers(players)
+      // u1 and u2 have mutual preference (score 100), they should be paired together
+      const pairWithU1 = pairs.find(([a, b]) => a.userId === "u1" || b.userId === "u1")!
+      const u1Partner = pairWithU1[0].userId === "u1" ? pairWithU1[1] : pairWithU1[0]
+      expect(u1Partner.userId).toBe("u2")
+    })
+
+    it("handles all-avoid scenario gracefully", () => {
+      // 3 players who all avoid each other — no valid pairs
+      const players = [
+        makePlayer("u1", ["u2", "u3"]),
+        makePlayer("u2", ["u1", "u3"]),
+        makePlayer("u3", ["u1", "u2"]),
+      ]
+      const pairs = pairPlayers(players)
+      expect(pairs).toHaveLength(0)
+    })
+
+    it("produces deterministic results (same input -> same pairs)", () => {
+      const players = [
+        makePlayer("u1"),
+        makePlayer("u2"),
+        makePlayer("u3"),
+        makePlayer("u4"),
+      ]
+      const result1 = pairPlayers(players)
+      const result2 = pairPlayers(players)
+      expect(result1).toEqual(result2)
+    })
+  })
+
   describe("cleanupOldEntries", () => {
     it("should delete entries older than one day with status LEFT", async () => {
       mockQueueRepository.delete.mockResolvedValue({ affected: 3 })
