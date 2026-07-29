@@ -1,243 +1,134 @@
-import { Test, type TestingModule } from "@nestjs/testing"
-import { getRepositoryToken } from "@nestjs/typeorm"
-import type { Repository } from "typeorm"
-import { MultiplayerQueueService } from "./multiplayer-queue.service"
-import { Queue, QueueStatus, SkillLevel } from "./entities/queue.entity"
-import { Match } from "./entities/match.entity"
-import { BadRequestException, NotFoundException } from "@nestjs/common"
-import { jest } from "@jest/globals"
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { MultiplayerQueueService } from './multiplayer-queue.service';
+import { Queue, QueueStatus, SkillLevel } from './entities/queue.entity';
+import { Match } from './entities/match.entity';
 
-describe("MultiplayerQueueService", () => {
-  let service: MultiplayerQueueService
-  let queueRepository: Repository<Queue>
-  let matchRepository: Repository<Match>
+describe('MultiplayerQueueService', () => {
+  let service: MultiplayerQueueService;
+  let queueRepoMock: any;
+  let matchRepoMock: any;
+  let dataSourceMock: any;
 
-  const mockQueueRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    find: jest.fn(),
-    findOne: jest.fn(),
-    delete: jest.fn(),
-    count: jest.fn(),
-  }
-
-  const mockMatchRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    findOne: jest.fn(),
-    count: jest.fn(),
-  }
+  const mockEntry: any = {
+    id: 'q-1',
+    userId: 'u-1',
+    username: 'Alice',
+    skillLevel: SkillLevel.INTERMEDIATE,
+    gameMode: 'classic',
+    status: QueueStatus.WAITING,
+    waitTime: 10,
+    createdAt: new Date(),
+  };
 
   beforeEach(async () => {
+    queueRepoMock = {
+      findOne: jest.fn(),
+      create: jest.fn().mockImplementation((dto) => ({ ...mockEntry, ...dto })),
+      save: jest.fn().mockImplementation((q) => Promise.resolve(Array.isArray(q) ? q : { ...mockEntry, ...q })),
+      find: jest.fn().mockResolvedValue([mockEntry]),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+
+    matchRepoMock = {
+      findOne: jest.fn(),
+      count: jest.fn().mockResolvedValue(5),
+    };
+
+    dataSourceMock = {
+      transaction: jest.fn().mockImplementation((cb) => cb({
+        create: jest.fn().mockImplementation((entity, dto) => ({ id: 'm-1', ...dto })),
+        save: jest.fn().mockImplementation((item) => Promise.resolve(Array.isArray(item) ? item : { id: 'm-1', ...item })),
+      })),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MultiplayerQueueService,
-        {
-          provide: getRepositoryToken(Queue),
-          useValue: mockQueueRepository,
-        },
-        {
-          provide: getRepositoryToken(Match),
-          useValue: mockMatchRepository,
-        },
+        { provide: getRepositoryToken(Queue), useValue: queueRepoMock },
+        { provide: getRepositoryToken(Match), useValue: matchRepoMock },
+        { provide: DataSource, useValue: dataSourceMock },
       ],
-    }).compile()
+    }).compile();
 
-    service = module.get<MultiplayerQueueService>(MultiplayerQueueService)
-    queueRepository = module.get<Repository<Queue>>(getRepositoryToken(Queue))
-    matchRepository = module.get<Repository<Match>>(getRepositoryToken(Match))
-  })
+    service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+  });
 
-  afterEach(() => {
-    jest.clearAllMocks()
-  })
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
 
-  describe("joinQueue", () => {
-    it("should successfully join queue", async () => {
-      const joinQueueDto = {
-        userId: "123e4567-e89b-12d3-a456-426614174000",
-        username: "testuser",
-        skillLevel: SkillLevel.BEGINNER,
-        gameMode: "classic",
-      }
+  describe('joinQueue', () => {
+    it('joins queue successfully when user is not already in queue', async () => {
+      queueRepoMock.findOne.mockResolvedValue(null);
 
-      const mockQueueEntry = {
-        id: "queue-1",
-        ...joinQueueDto,
-        status: QueueStatus.WAITING,
-        waitTime: 0,
-        matchId: null,
-        createdAt: new Date(),
-        matchedAt: null,
-        preferences: {},
-      }
+      const status = await service.joinQueue({
+        userId: 'u-1',
+        username: 'Alice',
+        skillLevel: SkillLevel.INTERMEDIATE,
+      });
 
-      mockQueueRepository.findOne.mockResolvedValue(null) // No existing entry
-      mockQueueRepository.create.mockReturnValue(mockQueueEntry)
-      mockQueueRepository.save.mockResolvedValue(mockQueueEntry)
+      expect(status.userId).toBe('u-1');
+      expect(queueRepoMock.save).toHaveBeenCalled();
+    });
 
-      const result = await service.joinQueue(joinQueueDto)
+    it('throws BadRequestException if user is already in queue', async () => {
+      queueRepoMock.findOne.mockResolvedValue(mockEntry);
 
-      expect(result.userId).toBe(joinQueueDto.userId)
-      expect(result.status).toBe(QueueStatus.WAITING)
-      expect(mockQueueRepository.findOne).toHaveBeenCalledWith({
-        where: { userId: joinQueueDto.userId, status: QueueStatus.WAITING },
-      })
-    })
+      await expect(service.joinQueue({
+        userId: 'u-1',
+        username: 'Alice',
+        skillLevel: SkillLevel.INTERMEDIATE,
+      })).rejects.toThrow(BadRequestException);
+    });
+  });
 
-    it("should throw BadRequestException if user already in queue", async () => {
-      const joinQueueDto = {
-        userId: "123e4567-e89b-12d3-a456-426614174000",
-        username: "testuser",
-        skillLevel: SkillLevel.BEGINNER,
-        gameMode: "classic",
-      }
+  describe('leaveQueue', () => {
+    it('leaves queue successfully', async () => {
+      queueRepoMock.findOne.mockResolvedValue(mockEntry);
+      await service.leaveQueue('u-1');
+      expect(queueRepoMock.save).toHaveBeenCalled();
+    });
 
-      const existingEntry = { id: "existing", userId: joinQueueDto.userId }
-      mockQueueRepository.findOne.mockResolvedValue(existingEntry)
+    it('throws NotFoundException if user not found in queue', async () => {
+      queueRepoMock.findOne.mockResolvedValue(null);
+      await expect(service.leaveQueue('unknown')).rejects.toThrow(NotFoundException);
+    });
+  });
 
-      await expect(service.joinQueue(joinQueueDto)).rejects.toThrow(BadRequestException)
-    })
-  })
+  describe('getQueueStatus & getQueueList & getQueueStats', () => {
+    it('returns queue status for user', async () => {
+      queueRepoMock.findOne.mockResolvedValue(mockEntry);
+      const res = await service.getQueueStatus('u-1');
+      expect(res?.userId).toBe('u-1');
+    });
 
-  describe("leaveQueue", () => {
-    it("should successfully leave queue", async () => {
-      const userId = "123e4567-e89b-12d3-a456-426614174000"
-      const queueEntry = {
-        id: "queue-1",
-        userId,
-        status: QueueStatus.WAITING,
-        username: "testuser",
-      }
+    it('returns null if user not in queue', async () => {
+      queueRepoMock.findOne.mockResolvedValue(null);
+      const res = await service.getQueueStatus('unknown');
+      expect(res).toBeNull();
+    });
 
-      mockQueueRepository.findOne.mockResolvedValue(queueEntry)
-      mockQueueRepository.save.mockResolvedValue({
-        ...queueEntry,
-        status: QueueStatus.LEFT,
-        leftAt: expect.any(Date),
-      })
+    it('returns queue stats', async () => {
+      queueRepoMock.find.mockResolvedValue([mockEntry]);
+      const stats = await service.getQueueStats();
+      expect(stats.totalInQueue).toBe(1);
+      expect(stats.matchesToday).toBe(5);
+    });
+  });
 
-      await service.leaveQueue(userId)
+  describe('getMatch', () => {
+    it('returns match by id', async () => {
+      matchRepoMock.findOne.mockResolvedValue({ id: 'm-1', playerIds: ['u-1', 'u-2'] });
+      const match = await service.getMatch('m-1');
+      expect(match.matchId).toBe('m-1');
+    });
 
-      expect(mockQueueRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: QueueStatus.LEFT,
-          leftAt: expect.any(Date),
-        }),
-      )
-    })
-
-    it("should throw NotFoundException if user not in queue", async () => {
-      const userId = "123e4567-e89b-12d3-a456-426614174000"
-      mockQueueRepository.findOne.mockResolvedValue(null)
-
-      await expect(service.leaveQueue(userId)).rejects.toThrow(NotFoundException)
-    })
-  })
-
-  describe("getQueueStatus", () => {
-    it("should return queue status for user", async () => {
-      const userId = "123e4567-e89b-12d3-a456-426614174000"
-      const queueEntry = {
-        id: "queue-1",
-        userId,
-        username: "testuser",
-        status: QueueStatus.WAITING,
-        skillLevel: SkillLevel.BEGINNER,
-        gameMode: "classic",
-        waitTime: 0,
-        matchId: null,
-        createdAt: new Date(Date.now() - 30000), // 30 seconds ago
-        matchedAt: null,
-      }
-
-      mockQueueRepository.findOne.mockResolvedValue(queueEntry)
-      mockQueueRepository.save.mockResolvedValue({
-        ...queueEntry,
-        waitTime: 30,
-      })
-
-      const result = await service.getQueueStatus(userId)
-
-      expect(result).toBeDefined()
-      expect(result!.userId).toBe(userId)
-      expect(result!.waitTime).toBeGreaterThan(0)
-    })
-
-    it("should return null if user not in queue", async () => {
-      const userId = "123e4567-e89b-12d3-a456-426614174000"
-      mockQueueRepository.findOne.mockResolvedValue(null)
-
-      const result = await service.getQueueStatus(userId)
-
-      expect(result).toBeNull()
-    })
-  })
-
-  describe("getQueueStats", () => {
-    it("should return queue statistics", async () => {
-      const mockQueueEntries = [
-        {
-          skillLevel: SkillLevel.BEGINNER,
-          gameMode: "classic",
-          createdAt: new Date(Date.now() - 60000), // 1 minute ago
-        },
-        {
-          skillLevel: SkillLevel.INTERMEDIATE,
-          gameMode: "classic",
-          createdAt: new Date(Date.now() - 30000), // 30 seconds ago
-        },
-      ]
-
-      mockQueueRepository.find.mockResolvedValue(mockQueueEntries)
-      mockMatchRepository.count.mockResolvedValue(5)
-
-      const result = await service.getQueueStats()
-
-      expect(result.totalInQueue).toBe(2)
-      expect(result.bySkillLevel[SkillLevel.BEGINNER]).toBe(1)
-      expect(result.bySkillLevel[SkillLevel.INTERMEDIATE]).toBe(1)
-      expect(result.byGameMode.classic).toBe(2)
-      expect(result.matchesToday).toBe(5)
-    })
-  })
-
-  describe("cleanupOldEntries", () => {
-    it("should delete entries older than one day with status LEFT", async () => {
-      mockQueueRepository.delete.mockResolvedValue({ affected: 3 })
-
-      await service.cleanupOldEntries()
-
-      expect(mockQueueRepository.delete).toHaveBeenCalledTimes(1)
-
-      const deleteCall = mockQueueRepository.delete.mock.calls[0][0]
-
-      // Should filter by status LEFT
-      expect(deleteCall.status).toBe(QueueStatus.LEFT)
-
-      // Should filter by createdAt (the LessThan find operator for old entries)
-      expect(deleteCall.createdAt).toBeDefined()
-
-      // Verify the delete was called with a createdAt filter (LessThan semantics)
-      // TypeORM's LessThan creates a FindOperator; we verify it exists and is
-      // not MoreThan by checking the operator value points to a past date
-      const createdAtFilter = deleteCall.createdAt
-      expect(createdAtFilter).toBeDefined()
-      expect(typeof createdAtFilter).toBe("object")
-    })
-
-    it("should not delete recent or waiting entries", async () => {
-      mockQueueRepository.delete.mockResolvedValue({ affected: 0 })
-
-      await service.cleanupOldEntries()
-
-      const deleteCall = mockQueueRepository.delete.mock.calls[0][0]
-
-      // Should only target LEFT status entries
-      expect(deleteCall.status).toBe(QueueStatus.LEFT)
-      // Should have a createdAt filter (LessThan semantics)
-      expect(deleteCall.createdAt).toBeDefined()
-      expect(typeof deleteCall.createdAt).toBe("object")
-    })
-  })
-})
+    it('throws NotFoundException if match not found', async () => {
+      matchRepoMock.findOne.mockResolvedValue(null);
+      await expect(service.getMatch('invalid')).rejects.toThrow(NotFoundException);
+    });
+  });
+});

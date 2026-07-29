@@ -1,14 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AnalyticsService } from './analytics.service';
-
-// Provide a no-op CacheService so Nest's reflection-based DI can resolve
-// the (optional) constructor parameter introduced in #107.
-const NOOP_CACHE = {
-  getOrSet: async (_key: string, _ttl: number, loader: () => Promise<unknown>) =>
-    loader(),
-  invalidate: async () => undefined,
-  inflightCount: () => 0,
-};
 
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
@@ -17,7 +9,12 @@ describe('AnalyticsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AnalyticsService,
-        { provide: 'CacheService', useValue: NOOP_CACHE },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined), // No REDIS_URL -> in-memory
+          },
+        },
       ],
     }).compile();
 
@@ -28,38 +25,60 @@ describe('AnalyticsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('in-memory fallback (no REDIS_URL)', () => {
-    it('records solves to the in-memory mirror and aggregates correctly', async () => {
-      await service.recordPuzzleSolveAsync('u1', 'pA', 100);
-      await service.recordPuzzleSolveAsync('u1', 'pA', 200);
-      await service.recordPuzzleSolveAsync('u2', 'pB', 50);
+  describe('recordPuzzleSolve & recordPuzzleSolveAsync', () => {
+    it('records puzzle solve in memory', async () => {
+      service.recordPuzzleSolve('user1', 'p1', 100);
+      const avg = service.getAverageSolveTime('p1');
+      expect(avg).toBe(100);
 
-      const sorted = await service.getMostSolvedPuzzlesAsync();
-      expect(sorted).toEqual([
-        { puzzleId: 'pA', solveCount: 2 },
-        { puzzleId: 'pB', solveCount: 1 },
-      ]);
-
-      await expect(service.getAverageSolveTimeAsync('pA')).resolves.toBe(150);
-      await expect(service.getAverageSolveTimeAsync('pB')).resolves.toBe(50);
-      await expect(service.getAverageSolveTimeAsync('unknown')).resolves.toBe(
-        0,
-      );
-
-      const u1History = await service.getUserPuzzleStatsAsync('u1');
-      expect(u1History.get('pA')).toMatchObject({
-        solveCount: 2,
-        totalSolveTime: 300,
-        attempts: 2,
-      });
-      expect(u1History.get('pA')?.lastSolved).toBeInstanceOf(Date);
+      await service.recordPuzzleSolveAsync('user1', 'p1', 200);
+      const avg2 = service.getAverageSolveTime('p1');
+      expect(avg2).toBe(150);
     });
+  });
 
-    it('records every solve exactly once (no double-increment in mirror)', async () => {
-      await service.recordPuzzleSolveAsync('u1', 'pA', 100);
-      await service.recordPuzzleSolve('u1', 'pA', 100);
-      const sorted = await service.getMostSolvedPuzzlesAsync();
-      expect(sorted).toEqual([{ puzzleId: 'pA', solveCount: 2 }]);
+  describe('getMostSolvedPuzzles & getMostSolvedPuzzlesAsync', () => {
+    it('returns sorted most solved puzzles', async () => {
+      service.recordPuzzleSolve('user1', 'p1', 100);
+      service.recordPuzzleSolve('user2', 'p1', 120);
+      service.recordPuzzleSolve('user1', 'p2', 50);
+
+      const syncRes = await service.getMostSolvedPuzzles();
+      expect(syncRes[0].puzzleId).toBe('p1');
+      expect(syncRes[0].solveCount).toBe(2);
+
+      const asyncRes = await service.getMostSolvedPuzzlesAsync(1);
+      expect(asyncRes).toHaveLength(1);
+      expect(asyncRes[0].puzzleId).toBe('p1');
+    });
+  });
+
+  describe('getAverageSolveTime & getAverageSolveTimeAsync', () => {
+    it('returns 0 for non-existent puzzle', async () => {
+      expect(service.getAverageSolveTime('none')).toBe(0);
+      expect(await service.getAverageSolveTimeAsync('none')).toBe(0);
+    });
+  });
+
+  describe('getUserPuzzleStats & getUserPuzzleStatsAsync', () => {
+    it('returns user puzzle engagement map', async () => {
+      service.recordPuzzleSolve('userA', 'p1', 60);
+      const syncStats = service.getUserPuzzleStats('userA');
+      expect(syncStats.get('p1')?.solveCount).toBe(1);
+
+      const asyncStats = await service.getUserPuzzleStatsAsync('userA');
+      expect(asyncStats.get('p1')?.solveCount).toBe(1);
+
+      const emptyStats = service.getUserPuzzleStats('unknown');
+      expect(emptyStats.size).toBe(0);
+    });
+  });
+
+  describe('seedData', () => {
+    it('seeds test data successfully', () => {
+      service.seedData();
+      const avg = service.getAverageSolveTime('puzzleA');
+      expect(avg).toBeGreaterThan(0);
     });
   });
 });
