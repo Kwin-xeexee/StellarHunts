@@ -55,6 +55,8 @@ fn init_with_admin(env: &Env) -> (Address, Address, StellarHuntsClient) {
 #[test]
 fn test_set_question_per_level_admin_only() {
     let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, client) = init_with_admin(&env);
     let (admin, contract_address, client) = init_with_admin(&env);
 
     env.mock_auths(&[MockAuth {
@@ -94,6 +96,8 @@ fn test_set_question_per_level_unauthorized() {
 #[test]
 fn test_add_and_get_question() {
     let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, client) = init_with_admin(&env);
     let (admin, contract_address, client) = init_with_admin(&env);
 
     let level = crate::Levels::Easy;
@@ -420,6 +424,87 @@ fn test_require_admin_not_initialized() {
     client.set_question_per_level(&5u32);
 }
 
+#[test]
+fn test_claim_level_completion_nft_retry_safe_on_nft_panic() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = new_admin(&env);
+    let contract_id = env.register_contract(None, StellarHunts);
+    let client = StellarHuntsClient::new(&env, &contract_id);
+    client.init(&admin);
+
+    let player = user(&env);
+
+    // Register and initialise the NFT contract, granting the game
+    // contract the minter role.
+    let nft_id = env.register_contract(None, stellar_hunts_nft::StellarHuntsNft);
+    let nft_client =
+        stellar_hunts_nft::StellarHuntsNftClient::new(&env, &nft_id);
+    nft_client.init(
+        &admin,
+        &contract_id,
+        &soroban_sdk::String::from_str(&env, "ipfs://placeholder/"),
+        &soroban_sdk::String::from_str(&env, "StellarHuntsBadge"),
+        &soroban_sdk::String::from_str(&env, "SHB"),
+    );
+
+    // Wire the game contract to the NFT contract.
+    client.set_nft_contract_address(&nft_id);
+
+    // Setup: 1 question per level so the player can complete Easy quickly.
+    client.set_question_per_level(&1u32);
+    let level = crate::Levels::Easy;
+    client.add_question(&level, &b(&env, "Q?"), &b(&env, "A"), &b(&env, "H"));
+
+    // Player completes Easy level.
+    assert!(client.submit_answer(&player, &1u64, &b(&env, "A")));
+
+    // ---- First mint: success ----
+    client.claim_level_completion_nft(&player, &level);
+    assert!(nft_client.has_level_badge(&player, &level));
+
+    // Verify the game contract recorded the mint.
+    let lp = client.get_player_level_progress(&player, &level);
+    assert!(lp.nft_minted);
+
+    // ---- Simulate out-of-sync state ----
+    // The NFT contract still holds the badge, but we reset the game
+    // contract's nft_minted flag as if a previous cross-contract call
+    // was interrupted before the storage write.
+    env.as_contract(&contract_id, || {
+        let lp_key = crate::DataKey::PlayerLevelProgress(player.clone(), level.clone());
+        let mut lp: crate::LevelProgress =
+            env.storage().persistent().get(&lp_key).unwrap();
+        lp.nft_minted = false;
+        env.storage().persistent().set(&lp_key, &lp);
+    });
+
+    // Confirm the flag was reset.
+    let lp_reset = client.get_player_level_progress(&player, &level);
+    assert!(!lp_reset.nft_minted);
+
+    // ---- Second mint attempt: should panic ----
+    // The game contract sees nft_minted == false and proceeds to call
+    // the NFT contract, which already has the badge -> AlreadyHasBadge.
+    let should_panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.claim_level_completion_nft(&player, &level);
+    }));
+    assert!(
+        should_panic.is_err(),
+        "expected AlreadyHasBadge panic from NFT contract"
+    );
+
+    // ---- Retry-safe assertion ----
+    // Because the game contract writes lp.nft_minted = true AFTER the
+    // cross-contract call, a panic in the NFT contract means the write
+    // never executes. The flag must remain false so the player (or an
+    // off-chain retry loop) can safely retry the claim.
+    let lp_final = client.get_player_level_progress(&player, &level);
+    assert!(
+        !lp_final.nft_minted,
+        "nft_minted must remain false so claim_level_completion_nft is retry-safe"
+    );
 // ---------------------------------------------------------------------
 // Summary of negative-auth coverage added:
 //   • test_set_question_per_level_unauthorized
