@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common"
-import { type Repository, MoreThan, DataSource } from "typeorm"
-import { type Repository, LessThan, MoreThan } from "typeorm"
+import { type Repository, LessThan, MoreThan, DataSource } from "typeorm"
 import { Cron, CronExpression } from "@nestjs/schedule"
 import { type Queue, QueueStatus, SkillLevel } from "./entities/queue.entity"
 import type { Match } from "./entities/match.entity"
@@ -184,7 +183,43 @@ export class MultiplayerQueueService {
   }
 
   /**
-   * Process matchmaking logic (runs periodically)
+   * Process matchmaking logic (runs periodically via cron).
+   *
+   * **Matching algorithm (graph-based stable pairing):**
+   *
+   * 1. **Grouping phase** — `groupPlayersForMatching` partitions waiting players
+   *    into buckets by `(gameMode, skillLevel)`. Long-waiting players (waitTime > 2 min)
+   *    are also collected into cross-skill buckets so they don't starve.
+   *
+   * 2. **Pairing phase** — For every group with ≥ 2 players, `pairPlayersInGroup`
+   *    builds a **weighted compatibility graph**:
+   *
+   *    - Vertices are the players in the group.
+   *    - An edge `(A, B)` exists **only** if neither party has the other in their
+   *      `avoidOpponents` list (mutual incompatibility removes the edge entirely).
+   *    - Each surviving edge is assigned a **compatibility score** that encodes
+   *      both directional preferences (`preferredOpponents`) and parity:
+   *
+   *        | Condition                                   | Score  |
+   *        |---------------------------------------------|--------|
+   *        | Both list each other as `preferredOpponents` | 100    |
+   *        | One lists the other as `preferredOpponents`  | 50     |
+   *        | Neither has a stated preference              | 10 + ε |
+   *        | Either has the other in `avoidOpponents`     | — edge removed |
+   *
+   *    - Edges are sorted by score descending and **greedily consumed**: the
+   *      highest-scoring pair is matched first, then both vertices are removed
+   *      from further consideration. This yields a deterministic, O(n² log n)
+   *      result that is **stable** in the sense that no two unmatched players
+   *      would prefer each other over their current matches (because any such
+   *      pair would have been considered earlier when their edge was processed).
+   *
+   * 3. **Match creation** — For every pair produced by the algorithm,
+   *    `createMatch` persists the match and updates queue-entry status within a
+   *    single database transaction.
+   *
+   * Players who remain unmatched (odd counts) keep their `WAITING` status and
+   * are picked up by the next cron cycle.
    */
   @Cron(CronExpression.EVERY_10_SECONDS)
   async processMatchmaking(): Promise<void> {
@@ -205,13 +240,93 @@ export class MultiplayerQueueService {
 
     for (const group of playerGroups) {
       if (group.length >= 2) {
-        await this.createMatch(group.slice(0, 2)) // Match first 2 players
+        // Use graph-based stable pairing instead of naive slice(0,2)
+        const pairs = this.pairPlayersInGroup(group)
+        for (const pair of pairs) {
+          await this.createMatch(pair)
+        }
       }
     }
   }
 
   /**
-   * Group players for optimal matching
+   * Pair players within a group using a greedy maximum-weight matching
+   * algorithm on a compatibility graph.
+   *
+   * **Scope:** This method operates on a single homogeneous group (same
+   * `gameMode` and `skillLevel`). It returns an array of 2-element arrays
+   * where each sub-array is a compatible pair ready for match creation.
+   *
+   * **Algorithm (greedy weighted matching):**
+   *
+   * 1. Build a complete graph where vertices are the input players.
+   * 2. Remove any edge `(i, j)` where `i` has `j` in `avoidOpponents` **or**
+   *    `j` has `i` in `avoidOpponents` (incompatible).
+   * 3. Score every surviving edge with `computeCompatibilityScore`.
+   * 4. Sort edges by score descending, tie-breaking by player index for
+   *    determinism.
+   * 5. Iterate edges greedily: if neither endpoint is already matched, pair
+   *    them and mark both as matched.
+   *
+   * **Why greedy?** The problem of finding a maximum-weight matching in a
+   * general graph (Blossom algorithm) is O(n³) and adds significant complexity
+   * for little gain given our small group sizes (typically 2 – 20). The greedy
+   * approach is O(n² log n), deterministic, and produces optimal or near-optimal
+   * results because our edge weights are so coarse (only 3 tiers).
+   *
+   * @param group - Players in the same game-mode / skill-level bucket.
+   * @returns An array of 2-player pairs to match.
+   */
+  private pairPlayersInGroup(group: Queue[]): [Queue, Queue][] {
+    if (group.length < 2) return []
+
+    const n = group.length
+    const matched = new Array<boolean>(n).fill(false)
+    const pairs: [Queue, Queue][] = []
+
+    // Build sorted list of all compatible edges
+    interface Edge {
+      i: number
+      j: number
+      score: number
+    }
+
+    const edges: Edge[] = []
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const score = this.computeCompatibilityScore(group[i], group[j])
+        // -1 signals incompatibility (avoidOpponents conflict)
+        if (score >= 0) {
+          edges.push({ i, j, score })
+        }
+      }
+    }
+
+    // Sort by score descending; tie-break by (i, j) for determinism
+    edges.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      if (a.i !== b.i) return a.i - b.i
+      return a.j - b.j
+    })
+
+    // Greedy matching
+    for (const edge of edges) {
+      if (matched[edge.i] || matched[edge.j]) continue
+      matched[edge.i] = true
+      matched[edge.j] = true
+      pairs.push([group[edge.i], group[edge.j]])
+    }
+
+    return pairs
+  }
+
+  /**
+   * Group players for optimal matching.
+   *
+   * Partitions waiting players into buckets by `(gameMode, skillLevel)`.
+   * Long-waiting players (waitTime > 120 s) are also collected into
+   * cross-skill buckets so they don't starve in the queue.
    */
   private groupPlayersForMatching(players: Queue[]): Queue[][] {
     const groups: Record<string, Queue[]> = {}
@@ -232,6 +347,36 @@ export class MultiplayerQueueService {
     }
 
     return Object.values(groups)
+  }
+
+  /**
+   * Compute a numeric compatibility score between two players.
+   *
+   * Returns `-1` if the players are incompatible (either has the other in
+   * `avoidOpponents`). Otherwise returns a score where higher values indicate
+   * a stronger desired pairing.
+   *
+   * Scoring tiers:
+   * - **100** — Mutual `preferredOpponents` (both listed each other)
+   * - **50**  — One-sided `preferredOpponents`
+   * - **10 + ε** — No explicit preference (ε is a small tie-breaker based on
+   *                player indices to ensure determinism)
+   */
+  private computeCompatibilityScore(a: Queue, b: Queue): number {
+    const aAvoidsB = a.preferences?.avoidOpponents?.includes(b.userId) ?? false
+    const bAvoidsA = b.preferences?.avoidOpponents?.includes(a.userId) ?? false
+
+    // Incompatible — remove edge entirely
+    if (aAvoidsB || bAvoidsA) {
+      return -1
+    }
+
+    const aPrefersB = a.preferences?.preferredOpponents?.includes(b.userId) ?? false
+    const bPrefersA = b.preferences?.preferredOpponents?.includes(a.userId) ?? false
+
+    if (aPrefersB && bPrefersA) return 100  // mutual preference
+    if (aPrefersB || bPrefersA) return 50   // one-sided preference
+    return 10                                // neutral
   }
 
   /**

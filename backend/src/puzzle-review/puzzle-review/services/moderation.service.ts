@@ -240,6 +240,9 @@ export class ModerationService {
     reason?: ModerationReason,
     notes?: string,
   ): Promise<ModerationResponse[]> {
+    if (!moderatorId) {
+      throw new BadRequestException("Moderator authorization required for bulk review updates")
+    }
     this.logger.log(`Bulk moderating ${reviewIds.length} reviews - Action: ${action}`)
 
     const results: ModerationResponse[] = []

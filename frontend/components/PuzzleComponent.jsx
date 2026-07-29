@@ -387,7 +387,7 @@ const PuzzleComponent = ({
             variant="outline"
             disabled={hintLoading || showHint}
             onClick={handleHintToggle}
-            className="group border-white/10 bg-transparent text-gray-300 transition-all duration-300 hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-300"
+            className="group border-white/10 bg-transparent text-gray-200 transition-all duration-300 hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-300"
           >
             <span className="flex items-center gap-2">
               {hintLoading ? (
