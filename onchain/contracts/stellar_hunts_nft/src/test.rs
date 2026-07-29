@@ -36,6 +36,8 @@ fn test_init_and_has_level_badge() {
     assert!(!client.has_level_badge(&r, &crate::Levels::Easy));
 }
 
+
+
 #[test]
 fn test_mint_via_game_contract_then_query() {
     let env = Env::default();
