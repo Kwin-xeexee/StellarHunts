@@ -429,3 +429,110 @@ fn test_require_admin_not_initialized() {
 // Each verifies that calling an admin-gated function without authorizing
 // the admin address for that exact function name causes a panic.
 // ---------------------------------------------------------------------
+#[test]
+fn test_cross_contract_full_happy_path_nft_registered_first() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Register the NFT contract first, then the game contract — exercises
+    // the "NFT deployed before the game" ordering. This works because
+    // `env.register_contract` only needs a contract *registered* (not
+    // initialized) to hand back its Address, so the NFT's `init` can take
+    // the game contract's id as its pre-approved minter up front.
+    let nft_admin = new_admin(&env);
+    let nft_contract_id = env.register_contract(None, stellar_hunts_nft::StellarHuntsNft);
+    let nft_client = stellar_hunts_nft::StellarHuntsNftClient::new(&env, &nft_contract_id);
+
+    let game_admin = new_admin(&env);
+    let game_contract_id = env.register_contract(None, StellarHunts);
+    let game_client = StellarHuntsClient::new(&env, &game_contract_id);
+
+    nft_client.init(
+        &nft_admin,
+        &game_contract_id,
+        &soroban_sdk::String::from_str(&env, "https://example.com/badge/"),
+        &soroban_sdk::String::from_str(&env, "StellarHunts Badge"),
+        &soroban_sdk::String::from_str(&env, "SHB"),
+    );
+    assert!(nft_client.has_minter_role(&game_contract_id));
+
+    game_client.init(&game_admin);
+    game_client.set_nft_contract_address(&nft_contract_id);
+    assert_eq!(game_client.get_nft_contract_address(), nft_contract_id);
+
+    // Player answers their way through Easy (1 question) and claims the badge.
+    let player = user(&env);
+    game_client.set_question_per_level(&1u32);
+    let level = crate::Levels::Easy;
+    let question = b(&env, "What is 2+2?");
+    let answer = b(&env, "4");
+    let hint = b(&env, "basic math");
+    game_client.add_question(&level, &question, &answer, &hint);
+
+    let correct = game_client.submit_answer(&player, &1u64, &answer);
+    assert!(correct);
+    assert_eq!(game_client.get_player_level(&player), crate::Levels::Medium);
+
+    let progress = game_client.get_player_level_progress(&player, &level);
+    assert!(progress.is_completed);
+    assert!(!progress.nft_minted);
+
+    game_client.claim_level_completion_nft(&player, &level);
+
+    assert!(nft_client.has_level_badge(&player, &level));
+    let badge_data = nft_client.get_badge_data(&player, &level).unwrap();
+    assert_eq!(badge_data.minter, game_contract_id);
+
+    let progress_after = game_client.get_player_level_progress(&player, &level);
+    assert!(progress_after.nft_minted);
+}
+
+#[test]
+fn test_cross_contract_full_happy_path_game_registered_first() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Reverse order: game contract registered before the NFT contract.
+    let game_admin = new_admin(&env);
+    let game_contract_id = env.register_contract(None, StellarHunts);
+    let game_client = StellarHuntsClient::new(&env, &game_contract_id);
+
+    let nft_admin = new_admin(&env);
+    let nft_contract_id = env.register_contract(None, stellar_hunts_nft::StellarHuntsNft);
+    let nft_client = stellar_hunts_nft::StellarHuntsNftClient::new(&env, &nft_contract_id);
+
+    // Model the case where the game contract's identity isn't the one
+    // baked into `init` — initialize with a throwaway address, then grant
+    // the real game contract minter rights explicitly.
+    let placeholder_minter = new_admin(&env);
+    nft_client.init(
+        &nft_admin,
+        &placeholder_minter,
+        &soroban_sdk::String::from_str(&env, "https://example.com/badge/"),
+        &soroban_sdk::String::from_str(&env, "StellarHunts Badge"),
+        &soroban_sdk::String::from_str(&env, "SHB"),
+    );
+    assert!(!nft_client.has_minter_role(&game_contract_id));
+    nft_client.grant_minter_role(&game_contract_id);
+    assert!(nft_client.has_minter_role(&game_contract_id));
+
+    game_client.init(&game_admin);
+    game_client.set_nft_contract_address(&nft_contract_id);
+
+    let player = user(&env);
+    game_client.set_question_per_level(&1u32);
+    let level = crate::Levels::Easy;
+    let question = b(&env, "Capital of Japan?");
+    let answer = b(&env, "Tokyo");
+    let hint = b(&env, "island nation");
+    game_client.add_question(&level, &question, &answer, &hint);
+
+    let correct = game_client.submit_answer(&player, &1u64, &answer);
+    assert!(correct);
+
+    game_client.claim_level_completion_nft(&player, &level);
+
+    assert!(nft_client.has_level_badge(&player, &level));
+    let badge_data = nft_client.get_badge_data(&player, &level).unwrap();
+    assert_eq!(badge_data.minter, game_contract_id);
+}
