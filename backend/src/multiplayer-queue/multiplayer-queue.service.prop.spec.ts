@@ -92,6 +92,249 @@ function createMockRepos() {
 // ---------------------------------------------------------------------------
 
 describe('MultiplayerQueueService — property-based', () => {
+  // ── computeCompatibilityScore ──────────────────────────────────────
+  describe('computeCompatibilityScore', () => {
+    function score(
+      service: MultiplayerQueueService,
+      a: Queue,
+      b: Queue,
+    ): number {
+      return (service as any).computeCompatibilityScore(a, b);
+    }
+
+    it('is symmetric for neutral players (no preferences)', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1, id: 'p1', userId: 'u1',
+            preferences: { ...p1.preferences, avoidOpponents: undefined, preferredOpponents: undefined },
+          };
+          const b: Queue = {
+            ...p2, id: 'p2', userId: 'u2',
+            preferences: { ...p2.preferences, avoidOpponents: undefined, preferredOpponents: undefined },
+          };
+          const sAB = score(service, a, b);
+          const sBA = score(service, b, a);
+          expect(sAB).toBe(sBA);
+          expect(sAB).toBe(10);
+        }),
+      );
+
+      module.close();
+    });
+
+    it('returns -1 when either player avoids the other', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1, id: 'p1', userId: 'u1',
+            preferences: { ...p1.preferences, avoidOpponents: ['u2'] },
+          };
+          const b: Queue = {
+            ...p2, id: 'p2', userId: 'u2',
+            preferences: { ...p2.preferences, avoidOpponents: undefined },
+          };
+          expect(score(service, a, b)).toBe(-1);
+        }),
+      );
+
+      module.close();
+    });
+
+    it('returns 100 for mutual preferredOpponents', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1, id: 'p1', userId: 'u1',
+            preferences: { ...p1.preferences, preferredOpponents: ['u2'], avoidOpponents: undefined },
+          };
+          const b: Queue = {
+            ...p2, id: 'p2', userId: 'u2',
+            preferences: { ...p2.preferences, preferredOpponents: ['u1'], avoidOpponents: undefined },
+          };
+          expect(score(service, a, b)).toBe(100);
+        }),
+      );
+
+      module.close();
+    });
+
+    it('scores avoidOpponents over preferredOpponents', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1, id: 'p1', userId: 'u1',
+            preferences: {
+              ...p1.preferences,
+              preferredOpponents: ['u2'],
+              avoidOpponents: ['u2'],
+            },
+          };
+          const b: Queue = {
+            ...p2, id: 'p2', userId: 'u2',
+            preferences: { ...p2.preferences, avoidOpponents: undefined },
+          };
+          // avoidOpponents takes priority over preferredOpponents
+          expect(score(service, a, b)).toBe(-1);
+        }),
+      );
+
+      module.close();
+    });
+  });
+
+  // ── pairPlayersInGroup ──────────────────────────────────────────────
+  describe('pairPlayersInGroup', () => {
+    function pairPlayers(
+      service: MultiplayerQueueService,
+      group: Queue[],
+    ): [Queue, Queue][] {
+      return (service as any).pairPlayersInGroup(group);
+    }
+
+    it('every player in a pair is compatible (no avoidOpponents violated)', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      // Batch of 6 players with random avoidOpponents
+      const playerBatch6Arb = fc.array(queuePlayerArb, { minLength: 4, maxLength: 8 });
+
+      await fc.assert(
+        fc.property(playerBatch6Arb, (players) => {
+          // Assign unique IDs to avoid self-avoid issues
+          const indexed = players.map((p, i) => ({
+            ...p,
+            id: `p${i}`,
+            userId: `u${i}`,
+            preferences: {
+              ...p.preferences,
+              // Ensure avoidOpponents only reference valid userIds that exist
+              avoidOpponents: p.preferences?.avoidOpponents?.filter(
+                (uid) => uid !== `u${i}`, // can't avoid yourself
+              ),
+            },
+          }));
+
+          // Map avoidOpponents to actual indices
+          for (const p of indexed) {
+            if (p.preferences?.avoidOpponents) {
+              p.preferences.avoidOpponents = p.preferences.avoidOpponents.filter(
+                (uid) => indexed.some((op) => op.userId === uid),
+              );
+            }
+          }
+
+          const pairs = pairPlayers(service, indexed);
+
+          // Verify no pair violates avoidOpponents
+          for (const [a, b] of pairs) {
+            const aAvoidsB = a.preferences?.avoidOpponents?.includes(b.userId) ?? false;
+            const bAvoidsA = b.preferences?.avoidOpponents?.includes(a.userId) ?? false;
+            expect(aAvoidsB || bAvoidsA).toBe(false);
+          }
+        }),
+      );
+
+      module.close();
+    });
+
+    it('never matches a player twice', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      const playerBatchArb = fc.array(queuePlayerArb, { minLength: 2, maxLength: 20 });
+
+      await fc.assert(
+        fc.property(playerBatchArb, (players) => {
+          const indexed = players.map((p, i) => ({
+            ...p,
+            id: `p${i}`,
+            userId: `u${i}`,
+          }));
+
+          const pairs = pairPlayers(service, indexed);
+          const matchedIds = new Set<string>();
+
+          for (const [a, b] of pairs) {
+            expect(matchedIds.has(a.userId)).toBe(false);
+            expect(matchedIds.has(b.userId)).toBe(false);
+            matchedIds.add(a.userId);
+            matchedIds.add(b.userId);
+          }
+        }),
+      );
+
+      module.close();
+    });
+
+    it('leftover count is at most 1 (odd group leaves 1 unmatched)', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(
+          fc.array(queuePlayerArb, { minLength: 2, maxLength: 20 }),
+          (players) => {
+            const indexed = players.map((p, i) => ({
+              ...p,
+              id: `p${i}`,
+              userId: `u${i}`,
+              preferences: {
+                ...p.preferences,
+                avoidOpponents: undefined, // no avoid conflicts
+              },
+            }));
+
+            const pairs = pairPlayers(service, indexed);
+            const matchedCount = pairs.length * 2;
+            const leftoverCount = indexed.length - matchedCount;
+
+            expect(leftoverCount).toBeLessThanOrEqual(1);
+          },
+        ),
+      );
+
+      module.close();
+    });
+
+    it('result is deterministic', async () => {
+      const { mocks, module } = await buildModule();
+      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+
+      await fc.assert(
+        fc.property(
+          fc.array(queuePlayerArb, { minLength: 2, maxLength: 12 }),
+          (players) => {
+            const indexed = players.map((p, i) => ({
+              ...p,
+              id: `p${i}`,
+              userId: `u${i}`,
+            }));
+
+            const result1 = pairPlayers(service, indexed);
+            const result2 = pairPlayers(service, indexed);
+
+            expect(result1).toEqual(result2);
+          },
+        ),
+      );
+
+      module.close();
+    });
+  });
+
   // ── groupPlayersForMatching ─────────────────────────────────────────
   describe('groupPlayersForMatching', () => {
     /** Access the private method. */

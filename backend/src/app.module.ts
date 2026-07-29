@@ -42,6 +42,7 @@ import { UserInventoryModule } from './user-inventory/user-inventory.module';
 import { UserRankingModule } from './user-ranking/user-ranking.module';
 import { UserReactionModule } from './user-reaction/user-reaction.module';
 import { UserReportCardModule } from './user-report-card/user-report-card.module';
+import { MaintenanceModeModule } from './maintenance-mode/maintenance-mode.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
     UserRankingModule,
     UserReactionModule,
     UserReportCardModule,
+    MaintenanceModeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

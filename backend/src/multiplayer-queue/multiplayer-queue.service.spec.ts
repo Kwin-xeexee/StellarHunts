@@ -131,4 +131,16 @@ describe('MultiplayerQueueService', () => {
       await expect(service.getMatch('invalid')).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('cleanupOldEntries', () => {
+    it('should delete entries older than one day with status LEFT', async () => {
+      queueRepoMock.delete.mockResolvedValue({ affected: 3 });
+
+      await service.cleanupOldEntries();
+
+      expect(queueRepoMock.delete).toHaveBeenCalledTimes(1);
+      const deleteCall = queueRepoMock.delete.mock.calls[0][0];
+      expect(deleteCall.status).toBe(QueueStatus.LEFT);
+    });
+  });
 });

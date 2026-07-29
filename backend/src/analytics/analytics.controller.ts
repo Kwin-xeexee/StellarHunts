@@ -25,8 +25,17 @@ export class AnalyticsController implements OnModuleInit {
 
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  onModuleInit() {
-    this.analyticsService.seedData();
+  async onModuleInit(): Promise<void> {
+    // seedData now writes to Postgres, so it's async — await it so the
+    // module isn't reported ready before the fixture rows exist, and
+    // catch so a seeding failure (e.g. DB not migrated yet) doesn't
+    // crash app boot.
+    try {
+      await this.analyticsService.seedData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Analytics seedData failed: ${message}`);
+    }
   }
 
   @Post('record-solve')
@@ -34,9 +43,6 @@ export class AnalyticsController implements OnModuleInit {
   async recordSolve(@Body() body: RecordSolveDto): Promise<void> {
     this.logger.log(`Received record-solve request: ${JSON.stringify(body)}`);
     const { userId, puzzleId, solveTime } = body;
-    // Await so write errors surface as 5xx rather than being silently
-    // dropped; the service internally falls back to in-memory on Redis
-    // failure so this won't crash the request.
     await this.analyticsService.recordPuzzleSolveAsync(
       userId,
       puzzleId,
@@ -77,5 +83,21 @@ export class AnalyticsController implements OnModuleInit {
       userHistoryObject[key] = value;
     });
     return userHistoryObject;
+  }
+
+  @Get('users/:userId/history/paginated')
+  async getUserPuzzleHistoryPaginated(
+    @Param('userId') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ): Promise<PaginatedUserPuzzleHistory> {
+    this.logger.log(
+      `Handling paginated history request for user ${userId} (page=${page}, limit=${limit}).`,
+    );
+    return this.analyticsService.getUserPuzzleHistoryPaginated(
+      userId,
+      page ? Number(page) : undefined,
+      limit ? Number(limit) : undefined,
+    );
   }
 }
