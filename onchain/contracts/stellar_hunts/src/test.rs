@@ -3,6 +3,8 @@
 use crate::{StellarHunts, StellarHuntsClient};
 // Brings `Address::generate` into scope as an extension trait method.
 use soroban_sdk::testutils::Address as _;
+use soroban_sdk::testutils::Ledger;
+use soroban_sdk::{Address, Bytes, Env};
 use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
 use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
 
@@ -428,6 +430,10 @@ fn test_require_admin_not_initialized() {
 fn test_claim_level_completion_nft_retry_safe_on_nft_panic() {
     let env = Env::default();
     env.mock_all_auths();
+    // Set a non-zero ledger so the `last_attempt_ledger == current_ledger`
+    // check in `submit_answer` (which initialises `last_attempt_ledger` to 0)
+    // does not trigger an `AttemptTooSoon` panic.
+    env.ledger().set_sequence_number(100_000);
 
     let admin = new_admin(&env);
     let contract_id = env.register_contract(None, StellarHunts);
