@@ -6,7 +6,7 @@ export class DailyRewardLog {
   id: string;
 
   @Index()
-  @Column()
+  @Column({ length: 128 })
   userId: string;
 
   @Column({ default: 1 })

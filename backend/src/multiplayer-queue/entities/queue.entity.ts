@@ -22,7 +22,7 @@ export class Queue {
   @PrimaryGeneratedColumn("uuid")
   id: string
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", length: 128 })
   userId: string
 
   @Column({ type: "varchar", length: 100 })
