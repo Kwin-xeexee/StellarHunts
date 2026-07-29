@@ -18,6 +18,7 @@ import axios from "axios";
  * not move the factory invocation inside `setItem` or the debounce
  * will be defeated by per-call instance re-creation.
  */
+
 const createThrottledStorage = (storage, delayMs = 150) => {
   let timer = null;
   let pendingValue = null;
@@ -90,7 +91,7 @@ const useGameStore = create(
           const response = await axios.post(
             "http://localhost:4001/auth/register",
             { username, password },
-            { withCredentials: true }
+            { withCredentials: true },
           );
           set({ user: response.data });
         } catch (error) {
@@ -104,7 +105,7 @@ const useGameStore = create(
           const response = await axios.post(
             "http://localhost:4001/auth/login",
             { username, password },
-            { withCredentials: true }
+            { withCredentials: true },
           );
           set({ user: response.data });
         } catch (error) {
@@ -118,7 +119,7 @@ const useGameStore = create(
           await axios.post(
             "http://localhost:4001/auth/logout",
             {},
-            { withCredentials: true }
+            { withCredentials: true },
           );
           set({
             user: null,
@@ -148,7 +149,7 @@ const useGameStore = create(
 
         const newCompletedPuzzles = [...completedPuzzles, puzzleId];
         const currentDifficultyPuzzles = newCompletedPuzzles.filter((id) =>
-          id.startsWith(currentDifficulty)
+          id.startsWith(currentDifficulty),
         );
 
         const isLevelCompleted = currentDifficultyPuzzles.length === 5;
@@ -182,7 +183,7 @@ const useGameStore = create(
               currentPuzzleIndex: nextPuzzleIndex,
               score: newScore,
             },
-            { withCredentials: true }
+            { withCredentials: true },
           );
 
           set({
@@ -208,7 +209,7 @@ const useGameStore = create(
               userId: user.id,
               nft,
             },
-            { withCredentials: true }
+            { withCredentials: true },
           );
 
           set({ nfts: [...nfts, nft] });
@@ -230,7 +231,7 @@ const useGameStore = create(
             {
               params: { page, limit },
               withCredentials: true,
-            }
+            },
           );
 
           const data = response.data || {};
@@ -244,7 +245,7 @@ const useGameStore = create(
             const existing = get().nfts || [];
             const seen = new Set(existing.map((n) => n.id));
             const merged = existing.concat(
-              items.filter((n) => n && !seen.has(n.id))
+              items.filter((n) => n && !seen.has(n.id)),
             );
             set({ nfts: merged });
           }
@@ -264,7 +265,7 @@ const useGameStore = create(
         try {
           const response = await axios.get(
             `http://localhost:4001/user/${user.id}`,
-            { withCredentials: true }
+            { withCredentials: true },
           );
           set(response.data);
         } catch (error) {
@@ -281,7 +282,7 @@ const useGameStore = create(
           await axios.post(
             `http://localhost:4001/game/reset`,
             { userId: user.id },
-            { withCredentials: true }
+            { withCredentials: true },
           );
           set({
             currentDifficulty: "easy",
@@ -301,7 +302,7 @@ const useGameStore = create(
       // Throttle writes so the localStorage payload is only re-serialised
       // and written once per coalescing window (see `createThrottledStorage`).
       storage: createJSONStorage(() =>
-        createThrottledStorage(safeLocalStorage())
+        createThrottledStorage(safeLocalStorage()),
       ),
       // Only durable progress fields are persisted. Transient state (none
       // currently, but a narrow allow-list keeps the storage size small and
@@ -316,8 +317,8 @@ const useGameStore = create(
         nfts: state.nfts,
       }),
       version: 1,
-    }
-  )
+    },
+  ),
 );
 
 export default useGameStore;
