@@ -4,9 +4,8 @@ use crate::{StellarHunts, StellarHuntsClient};
 // Brings `Address::generate` into scope as an extension trait method.
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::testutils::Ledger;
-use soroban_sdk::{Address, Bytes, Env};
+use soroban_sdk::{Address, Bytes, BytesN, Env};
 use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
 
 /// Generate a fresh admin address (distinct from the destructured binding
 /// returned by `init_with_admin`).

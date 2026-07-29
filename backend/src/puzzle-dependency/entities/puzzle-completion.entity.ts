@@ -6,7 +6,7 @@ export class PuzzleCompletion {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id' })
+  @Column({ name: 'user_id', length: 128 })
   @Index()
   userId: string;
 

@@ -24,6 +24,7 @@ pub struct Question {
     pub hashed_answer: BytesN<32>,
     pub level: Levels,
     pub hint: Bytes,
+    pub version: u32,
 }
 
 #[contracttype]
@@ -65,6 +66,21 @@ pub enum DataKey {
     QuestionPerLevelIndex(Levels),
     PlayerProgress(Address),
     PlayerLevelProgress(Address, Levels),
+    SchemaVersion,
+}
+
+// ---------------------------------------------------------------------
+// Schema version
+// ---------------------------------------------------------------------
+
+const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+fn get_schema_version(e: &Env) -> u32 {
+    e.storage().persistent().get(&DataKey::SchemaVersion).unwrap_or(0)
+}
+
+fn set_schema_version(e: &Env) {
+    e.storage().persistent().set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
 }
 
 // ---------------------------------------------------------------------
@@ -104,6 +120,7 @@ impl StellarHunts {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        set_schema_version(&env);
     }
 
     // -----------------------------------------------------------------
@@ -134,6 +151,7 @@ impl StellarHunts {
             hashed_answer: hashed,
             level: level.clone(),
             hint: hint.clone(),
+            version: CURRENT_SCHEMA_VERSION,
         };
         env.storage()
             .persistent()
@@ -263,6 +281,7 @@ impl StellarHunts {
             hashed_answer: hashed,
             level: level.clone(),
             hint,
+            version: existing.version,
         };
         env.storage().persistent().set(&existing_key, &updated);
 
@@ -571,6 +590,10 @@ impl StellarHunts {
 
     pub fn next_level(_env: Env, level: Levels) -> Levels {
         level.next()
+    }
+
+    pub fn get_schema_version(e: Env) -> u32 {
+        get_schema_version(&e)
     }
 
     // -----------------------------------------------------------------

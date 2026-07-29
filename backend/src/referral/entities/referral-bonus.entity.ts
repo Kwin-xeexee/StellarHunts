@@ -21,7 +21,7 @@ export class ReferralBonus {
   @PrimaryGeneratedColumn("uuid")
   id: string
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", length: 128 })
   userId: string
 
   @ManyToOne(() => User, { onDelete: "CASCADE" })

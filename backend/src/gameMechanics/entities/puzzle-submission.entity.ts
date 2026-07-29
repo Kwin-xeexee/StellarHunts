@@ -7,7 +7,7 @@ export class PuzzleSubmission {
   @PrimaryGeneratedColumn("uuid")
   id: string
 
-  @Column("uuid")
+  @Column({ type: "uuid", length: 128 })
   userId: string
 
   @Column("uuid")

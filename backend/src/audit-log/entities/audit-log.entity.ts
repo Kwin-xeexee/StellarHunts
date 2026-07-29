@@ -5,7 +5,7 @@ export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ length: 128 })
   userId: string;
 
   @Column()
