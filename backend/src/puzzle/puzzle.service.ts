@@ -43,8 +43,24 @@ export class PuzzleService {
     if (difficulty) where.difficulty = difficulty;
     const puzzles = await this.puzzleRepository.find({ where });
     // Exclude solution and hint
-    return puzzles.map(({ id, title, description, difficulty, rewardId, createdAt, updatedAt }) => ({
-      id, title, description, difficulty, rewardId, createdAt, updatedAt
-    }));
+    return puzzles.map(
+      ({
+        id,
+        title,
+        description,
+        difficulty,
+        rewardId,
+        createdAt,
+        updatedAt,
+      }) => ({
+        id,
+        title,
+        description,
+        difficulty,
+        rewardId,
+        createdAt,
+        updatedAt,
+      }),
+    );
   }
 }

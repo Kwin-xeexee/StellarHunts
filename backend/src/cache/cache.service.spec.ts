@@ -71,7 +71,9 @@ describe('CacheService', () => {
     const results = await Promise.all(promises);
 
     expect(loaderCalls).toBe(1);
-    expect(results.every((r) => r && (r as any).value === 'expensive')).toBe(true);
+    expect(results.every((r) => r && (r as any).value === 'expensive')).toBe(
+      true,
+    );
     expect(redisMock.set).toHaveBeenCalledTimes(1);
     // The in-flight map must drain after completion.
     expect(service.inflightCount()).toBe(0);
@@ -88,7 +90,11 @@ describe('CacheService', () => {
     const results = await Promise.all(promises);
 
     expect(loader).toHaveBeenCalledTimes(1);
-    expect(results.every((r) => r instanceof Error && (r as Error).message === 'boom')).toBe(true);
+    expect(
+      results.every(
+        (r) => r instanceof Error && (r as Error).message === 'boom',
+      ),
+    ).toBe(true);
     expect(redisMock.set).not.toHaveBeenCalled();
     expect(service.inflightCount()).toBe(0);
   });

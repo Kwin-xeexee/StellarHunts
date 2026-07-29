@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reward, RewardType } from './entities/reward.entity';
@@ -31,7 +36,7 @@ export class RewardsService {
       ...createRewardDto,
       currentClaims: 0,
     });
-    
+
     return await this.rewardRepository.save(reward);
   }
 
@@ -71,7 +76,9 @@ export class RewardsService {
     });
 
     if (!reward) {
-      throw new NotFoundException(`No active reward found for challenge ${challengeId}`);
+      throw new NotFoundException(
+        `No active reward found for challenge ${challengeId}`,
+      );
     }
 
     return reward;
@@ -80,7 +87,10 @@ export class RewardsService {
   /**
    * Check if user has already claimed a reward for a given challenge
    */
-  async hasUserClaimedReward(userId: string, challengeId: string): Promise<boolean> {
+  async hasUserClaimedReward(
+    userId: string,
+    challengeId: string,
+  ): Promise<boolean> {
     const existingClaim = await this.rewardClaimRepository.findOne({
       where: { userId, challengeId },
     });
@@ -159,7 +169,7 @@ export class RewardsService {
    */
   async updateClaimStatus(id: string, status: string): Promise<RewardClaim> {
     const claim = await this.getClaimById(id);
-    
+
     claim.status = status;
     return await this.rewardClaimRepository.save(claim);
   }
@@ -186,16 +196,18 @@ export class RewardsService {
    */
   async deleteReward(id: string): Promise<void> {
     const reward = await this.getRewardById(id);
-    
+
     // Check if there are any existing claims
     const existingClaims = await this.rewardClaimRepository.count({
       where: { rewardId: id },
     });
 
     if (existingClaims > 0) {
-      throw new BadRequestException('Cannot delete reward with existing claims');
+      throw new BadRequestException(
+        'Cannot delete reward with existing claims',
+      );
     }
 
     await this.rewardRepository.update(id, { isActive: false });
   }
-} 
+}

@@ -1,4 +1,3 @@
-
 import { Controller, Post, Get, Ip } from '@nestjs/common';
 import { GeoStatsService } from './geostats.service';
 
@@ -8,7 +7,6 @@ export class GeoStatsController {
 
   @Post('track')
   track(@Ip() ip: string) {
-    
     return this.geoStatsService.trackUser(ip);
   }
 

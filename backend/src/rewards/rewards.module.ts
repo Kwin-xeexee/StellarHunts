@@ -6,11 +6,9 @@ import { Reward } from './entities/reward.entity';
 import { RewardClaim } from './entities/reward-claim.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Reward, RewardClaim]),
-  ],
+  imports: [TypeOrmModule.forFeature([Reward, RewardClaim])],
   controllers: [RewardsController],
   providers: [RewardsService],
   exports: [RewardsService],
 })
-export class RewardsModule {} 
+export class RewardsModule {}

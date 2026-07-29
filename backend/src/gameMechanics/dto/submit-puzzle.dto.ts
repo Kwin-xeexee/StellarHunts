@@ -1,13 +1,13 @@
-import { IsString, IsUUID, IsOptional, IsInt } from "class-validator"
+import { IsString, IsUUID, IsOptional, IsInt } from 'class-validator';
 
 export class SubmitPuzzleDto {
   @IsUUID()
-  challengeId: string
+  challengeId: string;
 
   @IsString()
-  answer: string
+  answer: string;
 
   @IsInt()
   @IsOptional()
-  timeTaken?: number
+  timeTaken?: number;
 }

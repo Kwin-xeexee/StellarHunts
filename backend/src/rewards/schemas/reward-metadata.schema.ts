@@ -13,7 +13,9 @@ export const rewardMetadataSchema = z
     imageUrl: z.string().url().optional(),
 
     /** Rarity tier of the reward */
-    rarity: z.enum(['common', 'uncommon', 'rare', 'epic', 'legendary']).optional(),
+    rarity: z
+      .enum(['common', 'uncommon', 'rare', 'epic', 'legendary'])
+      .optional(),
 
     /** How the reward was earned (e.g. puzzle name, event slug) */
     earnedFrom: z.string().optional(),
@@ -48,9 +50,7 @@ export type RewardMetadata = z.infer<typeof rewardMetadataSchema>;
  * Validate and return a sanitised reward metadata object.
  * Throws a ZodError if validation fails.
  */
-export function validateRewardMetadata(
-  data: unknown,
-): RewardMetadata {
+export function validateRewardMetadata(data: unknown): RewardMetadata {
   return rewardMetadataSchema.parse(data);
 }
 
@@ -58,9 +58,7 @@ export function validateRewardMetadata(
  * Safely parse reward metadata, returning a default empty object on failure
  * instead of throwing. Useful when reading old records that may not conform.
  */
-export function safeParseRewardMetadata(
-  data: unknown,
-): RewardMetadata {
+export function safeParseRewardMetadata(data: unknown): RewardMetadata {
   const result = rewardMetadataSchema.safeParse(data);
   if (result.success) {
     return result.data;

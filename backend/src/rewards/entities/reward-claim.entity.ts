@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Reward } from './reward.entity';
 
@@ -36,4 +44,4 @@ export class RewardClaim {
   @ManyToOne(() => Reward, (reward) => reward.claims)
   @JoinColumn({ name: 'rewardId' })
   reward: Reward;
-} 
+}

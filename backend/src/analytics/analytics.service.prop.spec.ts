@@ -72,7 +72,11 @@ function countByUserAndPuzzle(
 
 /** Sum solveTime per (user, puzzle) pair. */
 function sumTimeByUserAndPuzzle(
-  records: ReadonlyArray<{ userId: string; puzzleId: string; solveTime: number }>,
+  records: ReadonlyArray<{
+    userId: string;
+    puzzleId: string;
+    solveTime: number;
+  }>,
 ): Map<string, number> {
   const sums = new Map<string, number>();
   for (const r of records) {
@@ -156,7 +160,9 @@ describe('AnalyticsService — property-based', () => {
           for (const r of records) {
             await svc.recordPuzzleSolveAsync(r.userId, r.puzzleId, r.solveTime);
           }
-          await expect(svc.getAverageSolveTimeAsync(unknownId)).resolves.toBe(0);
+          await expect(svc.getAverageSolveTimeAsync(unknownId)).resolves.toBe(
+            0,
+          );
         },
       ),
     );

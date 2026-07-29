@@ -15,7 +15,9 @@ export class ProgressService {
     const progress = await this.progressRepo.findOne({ where: { userId } });
 
     if (!progress) {
-      throw new NotFoundException(`Progress not found for user with ID ${userId}`);
+      throw new NotFoundException(
+        `Progress not found for user with ID ${userId}`,
+      );
     }
 
     // Optionally recalculate percentComplete if needed

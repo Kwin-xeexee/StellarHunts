@@ -1,4 +1,3 @@
-
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,7 +27,7 @@ export class GeoStatsService {
       return await this.geoStatsRepository.save(newGeoStat);
     } catch (error) {
       console.error('Error resolving IP address:', error);
-      
+
       const newGeoStat = this.geoStatsRepository.create({
         ipAddress,
         country: 'Unknown',

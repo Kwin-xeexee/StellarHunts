@@ -4,9 +4,8 @@ use crate::{StellarHunts, StellarHuntsClient};
 // Brings `Address::generate` into scope as an extension trait method.
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::testutils::Ledger;
-use soroban_sdk::{Address, Bytes, Env};
+use soroban_sdk::{Address, Bytes, BytesN, Env};
 use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
 
 /// Generate a fresh admin address (distinct from the destructured binding
 /// returned by `init_with_admin`).
@@ -626,4 +625,20 @@ fn test_cross_contract_full_happy_path_game_registered_first() {
     assert!(nft_client.has_level_badge(&player, &level));
     let badge_data = nft_client.get_badge_data(&player, &level).unwrap();
     assert_eq!(badge_data.minter, game_contract_id);
+}
+
+// ---------------------------------------------------------------------
+// Schema version
+// ---------------------------------------------------------------------
+
+#[test]
+fn test_schema_version() {
+    let e = Env::default();
+    let contract_id = e.register_contract(None, StellarHunts);
+    let client = StellarHuntsClient::new(&e, &contract_id);
+
+    let admin = new_admin(&e);
+    client.init(&admin);
+
+    assert_eq!(client.get_schema_version(), 1);
 }

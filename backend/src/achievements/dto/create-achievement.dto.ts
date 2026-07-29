@@ -8,7 +8,10 @@ export class CreateAchievementDto {
   @MaxLength(100)
   title: string;
 
-  @ApiProperty({ description: 'Optional description shown to the player', required: false })
+  @ApiProperty({
+    description: 'Optional description shown to the player',
+    required: false,
+  })
   @IsString()
   @IsOptional()
   @MaxLength(500)

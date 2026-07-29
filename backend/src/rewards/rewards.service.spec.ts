@@ -6,7 +6,11 @@ import { Reward, RewardType } from './entities/reward.entity';
 import { RewardClaim } from './entities/reward-claim.entity';
 import { CreateRewardDto } from './dto/create-reward.dto';
 import { ClaimRewardDto } from './dto/claim-reward.dto';
-import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 
 describe('RewardsService', () => {
   let service: RewardsService;
@@ -46,8 +50,12 @@ describe('RewardsService', () => {
     }).compile();
 
     service = module.get<RewardsService>(RewardsService);
-    rewardRepository = module.get<Repository<Reward>>(getRepositoryToken(Reward));
-    rewardClaimRepository = module.get<Repository<RewardClaim>>(getRepositoryToken(RewardClaim));
+    rewardRepository = module.get<Repository<Reward>>(
+      getRepositoryToken(Reward),
+    );
+    rewardClaimRepository = module.get<Repository<RewardClaim>>(
+      getRepositoryToken(RewardClaim),
+    );
   });
 
   afterEach(() => {
@@ -149,19 +157,26 @@ describe('RewardsService', () => {
     it('should throw NotFoundException when no active reward found for challenge', async () => {
       mockRewardRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.getRewardByChallengeId('challenge-001')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getRewardByChallengeId('challenge-001'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('hasUserClaimedReward', () => {
     it('should return true if user has claimed reward', async () => {
-      const existingClaim = { id: 'claim-001', userId: 'user-001', challengeId: 'challenge-001' };
+      const existingClaim = {
+        id: 'claim-001',
+        userId: 'user-001',
+        challengeId: 'challenge-001',
+      };
 
       mockRewardClaimRepository.findOne.mockResolvedValue(existingClaim);
 
-      const result = await service.hasUserClaimedReward('user-001', 'challenge-001');
+      const result = await service.hasUserClaimedReward(
+        'user-001',
+        'challenge-001',
+      );
 
       expect(mockRewardClaimRepository.findOne).toHaveBeenCalledWith({
         where: { userId: 'user-001', challengeId: 'challenge-001' },
@@ -172,7 +187,10 @@ describe('RewardsService', () => {
     it('should return false if user has not claimed reward', async () => {
       mockRewardClaimRepository.findOne.mockResolvedValue(null);
 
-      const result = await service.hasUserClaimedReward('user-001', 'challenge-001');
+      const result = await service.hasUserClaimedReward(
+        'user-001',
+        'challenge-001',
+      );
 
       expect(result).toBe(false);
     });
@@ -235,7 +253,11 @@ describe('RewardsService', () => {
     });
 
     it('should throw BadRequestException when reward limit reached', async () => {
-      const limitedReward = { ...mockReward, currentClaims: 100, maxClaims: 100 };
+      const limitedReward = {
+        ...mockReward,
+        currentClaims: 100,
+        maxClaims: 100,
+      };
 
       mockRewardClaimRepository.findOne.mockResolvedValue(null);
       mockRewardRepository.findOne.mockResolvedValue(limitedReward);
@@ -342,4 +364,4 @@ describe('RewardsService', () => {
       );
     });
   });
-}); 
+});

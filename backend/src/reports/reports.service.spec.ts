@@ -7,7 +7,9 @@ import { CreateReportDto } from './dto/create-report.dto';
 
 describe('ReportsService', () => {
   let service: ReportsService;
-  let repository: jest.Mocked<Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>>;
+  let repository: jest.Mocked<
+    Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>
+  >;
 
   beforeEach(async () => {
     repository = {
@@ -15,7 +17,9 @@ describe('ReportsService', () => {
       save: jest.fn(),
       findOne: jest.fn(),
       find: jest.fn(),
-    } as unknown as jest.Mocked<Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>>;
+    } as unknown as jest.Mocked<
+      Pick<Repository<Report>, 'create' | 'save' | 'findOne' | 'find'>
+    >;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,7 +35,10 @@ describe('ReportsService', () => {
   });
 
   it('creates a report with an OPEN status by default', async () => {
-    const dto: CreateReportDto = { puzzleId: 7, message: 'Inappropriate content' };
+    const dto: CreateReportDto = {
+      puzzleId: 7,
+      message: 'Inappropriate content',
+    };
     const expected = {
       id: 1,
       puzzleId: 7,
@@ -61,7 +68,9 @@ describe('ReportsService', () => {
     (repository.findOne as jest.Mock).mockResolvedValue(existing);
     (repository.save as jest.Mock).mockResolvedValue(resolved);
 
-    await expect(service.resolve(2, 'Resolved after review')).resolves.toMatchObject({
+    await expect(
+      service.resolve(2, 'Resolved after review'),
+    ).resolves.toMatchObject({
       status: ReportStatus.RESOLVED,
     });
   });

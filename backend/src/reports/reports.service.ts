@@ -16,7 +16,10 @@ export class ReportsService {
     private readonly reportRepository: Repository<Report>,
   ) {}
 
-  async create(createReportDto: CreateReportDto, userId: number): Promise<Report> {
+  async create(
+    createReportDto: CreateReportDto,
+    userId: number,
+  ): Promise<Report> {
     const existingReport = await this.reportRepository.findOne({
       where: {
         userId,

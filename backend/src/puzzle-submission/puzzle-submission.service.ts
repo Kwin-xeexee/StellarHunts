@@ -10,11 +10,20 @@ export class PuzzleSubmissionService {
     private readonly submissionRepo: Repository<PuzzleSubmission>,
   ) {}
 
-  async submitAnswer(playerId: string, puzzleId: string, answer: string, correctAnswer: string) {
+  async submitAnswer(
+    playerId: string,
+    puzzleId: string,
+    answer: string,
+    correctAnswer: string,
+  ) {
     // Find last submission for this player and puzzle
-    let submission = await this.submissionRepo.findOne({ where: { playerId, puzzleId }, order: { attemptCount: 'DESC' } });
+    let submission = await this.submissionRepo.findOne({
+      where: { playerId, puzzleId },
+      order: { attemptCount: 'DESC' },
+    });
     let attemptCount = submission ? submission.attemptCount + 1 : 1;
-    const isCorrect = answer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+    const isCorrect =
+      answer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
     const newSubmission = this.submissionRepo.create({
       playerId,
       puzzleId,
@@ -31,7 +40,10 @@ export class PuzzleSubmissionService {
   }
 
   async getAttempts(playerId: string, puzzleId: string): Promise<number> {
-    const last = await this.submissionRepo.findOne({ where: { playerId, puzzleId }, order: { attemptCount: 'DESC' } });
+    const last = await this.submissionRepo.findOne({
+      where: { playerId, puzzleId },
+      order: { attemptCount: 'DESC' },
+    });
     return last ? last.attemptCount : 0;
   }
 }

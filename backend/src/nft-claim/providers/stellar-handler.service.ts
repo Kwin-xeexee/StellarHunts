@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ClaimNFTDto } from '../dto/claim-nft.dto';
 
 /**
@@ -63,7 +68,9 @@ export class StellarHandlerService {
     if (randomError < 0.3) {
       throw new BadRequestException('Invalid NFT claim parameters');
     } else if (randomError < 0.6) {
-      throw new InternalServerErrorException('Network error connecting to Stellar');
+      throw new InternalServerErrorException(
+        'Network error connecting to Stellar',
+      );
     } else {
       throw new InternalServerErrorException('Contract execution failed');
     }
