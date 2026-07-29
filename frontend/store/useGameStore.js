@@ -89,7 +89,7 @@ const useGameStore = create(
       register: async (username, password) => {
         try {
           const response = await axios.post(
-            "http://localhost:4001/auth/register",
+            "http://localhost:3001/auth/register",
             { username, password },
             { withCredentials: true },
           );
@@ -103,7 +103,7 @@ const useGameStore = create(
       login: async (username, password) => {
         try {
           const response = await axios.post(
-            "http://localhost:4001/auth/login",
+            "http://localhost:3001/auth/login",
             { username, password },
             { withCredentials: true },
           );
@@ -117,7 +117,7 @@ const useGameStore = create(
       logout: async () => {
         try {
           await axios.post(
-            "http://localhost:4001/auth/logout",
+            "http://localhost:3001/auth/logout",
             {},
             { withCredentials: true },
           );
@@ -174,7 +174,7 @@ const useGameStore = create(
         // Update the backend
         try {
           await axios.post(
-            "http://localhost:4001/game/update",
+            "http://localhost:3001/game/update",
             {
               userId: user.id,
               completedPuzzles: newCompletedPuzzles,
@@ -204,7 +204,7 @@ const useGameStore = create(
 
         try {
           await axios.post(
-            "http://localhost:4001/nft/add",
+            "http://localhost:3001/nft/add",
             {
               userId: user.id,
               nft,
@@ -227,7 +227,7 @@ const useGameStore = create(
 
         try {
           const response = await axios.get(
-            `http://localhost:4001/users/${user.id}/inventory/nfts`,
+            `http://localhost:3001/users/${user.id}/inventory/nfts`,
             {
               params: { page, limit },
               withCredentials: true,
@@ -264,6 +264,8 @@ const useGameStore = create(
 
         try {
           const response = await axios.get(
+            `http://localhost:3001/user/${user.id}`,
+            { withCredentials: true }
             `http://localhost:4001/user/${user.id}`,
             { withCredentials: true },
           );
@@ -280,7 +282,7 @@ const useGameStore = create(
 
         try {
           await axios.post(
-            `http://localhost:4001/game/reset`,
+            `http://localhost:3001/game/reset`,
             { userId: user.id },
             { withCredentials: true },
           );

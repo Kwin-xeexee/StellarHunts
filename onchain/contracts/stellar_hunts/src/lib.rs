@@ -60,6 +60,7 @@ pub enum DataKey {
     QuestionCount,
     QuestionPerLevel,
     Question(u64),
+    RetiredQuestion(u64),
     QuestionsByLevel(Levels, u32),
     QuestionPerLevelIndex(Levels),
     PlayerProgress(Address),
@@ -279,6 +280,21 @@ impl StellarHunts {
         env.storage()
             .instance()
             .set(&DataKey::QuestionPerLevel, &amount);
+    }
+
+    pub fn retire_question(env: Env, question_id: u64) {
+        require_admin(&env);
+        let key = DataKey::Question(question_id);
+        if !env.storage().persistent().has(&key) {
+            panic_with_error!(&env, Error::QuestionNotFound);
+        }
+        env.storage()
+            .persistent()
+            .set(&DataKey::RetiredQuestion(question_id), &true);
+        env.events().publish(
+            (Symbol::new(&env, "question_retired"),),
+            (question_id,),
+        );
     }
 
     pub fn set_nft_contract_address(env: Env, new_address: Address) {
