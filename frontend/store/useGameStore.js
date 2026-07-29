@@ -69,6 +69,9 @@ const safeLocalStorage = () => {
   return window.localStorage;
 };
 
+const DIFFICULTY_LEVELS = ["easy", "medium", "difficult", "advanced"];
+const POINTS_PER_COMPLETION = 100;
+
 const useGameStore = create(
   persist(
     (set, get) => ({
@@ -85,6 +88,17 @@ const useGameStore = create(
       // NFT collection
       nfts: [],
 
+      // Error surface
+      errors: [],
+
+      // Difficulty configuration (loaded from API)
+      difficultyConfig: null,
+
+      clearError: (index) =>
+        set((state) => ({
+          errors: state.errors.filter((_, i) => i !== index),
+        })),
+
       // Auth actions
       register: async (username, password) => {
         try {
@@ -94,9 +108,11 @@ const useGameStore = create(
             { withCredentials: true },
           );
           set({ user: response.data });
+          return { ok: true };
         } catch (error) {
-          console.error("Registration failed:", error);
-          throw error;
+          const entry = { action: "register", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
+          return { ok: false, error: error.message };
         }
       },
 
@@ -108,9 +124,11 @@ const useGameStore = create(
             { withCredentials: true },
           );
           set({ user: response.data });
+          return { ok: true };
         } catch (error) {
-          console.error("Login failed:", error);
-          throw error;
+          const entry = { action: "login", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
+          return { ok: false, error: error.message };
         }
       },
 
@@ -131,7 +149,20 @@ const useGameStore = create(
             nfts: [],
           });
         } catch (error) {
-          console.error("Logout failed:", error);
+          const entry = { action: "logout", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
+        }
+      },
+
+      fetchDifficultyConfig: async () => {
+        try {
+          const response = await axios.get(
+            "http://localhost:3001/api/game/difficulty-config",
+          );
+          set({ difficultyConfig: response.data });
+        } catch (error) {
+          const entry = { action: "fetchDifficultyConfig", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
         }
       },
 
@@ -144,6 +175,7 @@ const useGameStore = create(
           completedPuzzles,
           completedDifficulties,
           score,
+          difficultyConfig,
         } = get();
         if (!user) return;
 
@@ -161,15 +193,16 @@ const useGameStore = create(
         let nextPuzzleIndex = (currentPuzzleIndex + 1) % 5;
 
         if (isLevelCompleted) {
-          const difficultyLevels = ["easy", "medium", "difficult", "advanced"];
-          const currentIndex = difficultyLevels.indexOf(currentDifficulty);
-          if (currentIndex < difficultyLevels.length - 1) {
-            nextDifficulty = difficultyLevels[currentIndex + 1];
+          const levels = difficultyConfig?.levels ?? DIFFICULTY_LEVELS;
+          const currentIndex = levels.indexOf(currentDifficulty);
+          if (currentIndex < levels.length - 1) {
+            nextDifficulty = levels[currentIndex + 1];
             nextPuzzleIndex = 0;
           }
         }
 
-        const newScore = score + 100;
+        const pointsPerCompletion = difficultyConfig?.pointsPerCompletion ?? POINTS_PER_COMPLETION;
+        const newScore = score + pointsPerCompletion;
 
         // Update the backend
         try {
@@ -194,7 +227,8 @@ const useGameStore = create(
             score: newScore,
           });
         } catch (error) {
-          console.error("Failed to update game progress:", error);
+          const entry = { action: "completePuzzle", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
         }
       },
 
@@ -214,7 +248,8 @@ const useGameStore = create(
 
           set({ nfts: [...nfts, nft] });
         } catch (error) {
-          console.error("Failed to add NFT:", error);
+          const entry = { action: "addNFT", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
         }
       },
 
@@ -252,7 +287,8 @@ const useGameStore = create(
 
           return { items, page, limit, total, hasMore };
         } catch (error) {
-          console.error("Failed to fetch NFT page:", error);
+          const entry = { action: "fetchNftsPage", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
           return { items: [], page, limit, total: 0, hasMore: false };
         }
       },
@@ -265,13 +301,12 @@ const useGameStore = create(
         try {
           const response = await axios.get(
             `http://localhost:3001/user/${user.id}`,
-            { withCredentials: true }
-            `http://localhost:4001/user/${user.id}`,
             { withCredentials: true },
           );
           set(response.data);
         } catch (error) {
-          console.error("Failed to load user data:", error);
+          const entry = { action: "loadUserData", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
         }
       },
 
@@ -295,7 +330,8 @@ const useGameStore = create(
             nfts: [],
           });
         } catch (error) {
-          console.error("Failed to reset progress:", error);
+          const entry = { action: "resetProgress", message: error.message, time: Date.now() };
+          set((state) => ({ errors: [...state.errors, entry] }));
         }
       },
     }),

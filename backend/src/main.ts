@@ -9,7 +9,7 @@ import { CacheModule } from "./cache/cache.module"
 import appConfig from "config/app.config"
 import databaseConfig from "config/database.config"
 import { PuzzleCategoryModule } from "./puzzle-category/puzzle-category.module"
-import { RewardsModule } from "./rewards/rewards.module"
+import { RewardModule } from "./reward/reward.module"
 import { PuzzleModule } from "./puzzle/puzzle.module"
 import { PuzzleSubmissionModule } from "./puzzle-submission/puzzle-submission.module"
 import { ContentModule } from "./content/content.module"
@@ -21,7 +21,7 @@ import { User } from "./auth/entities/user.entity"
 import { TimeTrial } from "./time-trial/time-trial.entity"
 import { Puzzle } from "./puzzle/puzzle.entity"
 import { Category } from "./puzzle-category/entities/category.entity"
-import { AnalyticsModule } from './analytics/analytics.module';
+import { AnalyticModule } from './analytic/analytic.module';
 import { RewardShopModule } from './reward-shop/reward-shop.module';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { NestFactory } from '@nestjs/core';
@@ -104,7 +104,7 @@ async function bootstrap(): Promise<void> {
     InAppNotificationsModule,
     PuzzleTranslationModule,
     NFTClaimModule,
-    AnalyticsModule,
+    AnalyticModule,
     RewardShopModule,
     ApiKeyModule,
     UserReactionModule,
