@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Hoist the mock before any imports
-vi.mock('axios');
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}));
 
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useReferral } from '@/hooks/useReferral';
