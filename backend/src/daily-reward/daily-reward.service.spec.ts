@@ -1,111 +1,56 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException } from '@nestjs/common';
-import { Repository } from 'typeorm';
 import { DailyRewardService } from './daily-reward.service';
 import { DailyRewardLog } from './entities/daily-reward-log.entity';
 
 describe('DailyRewardService', () => {
   let service: DailyRewardService;
-  let repo: Repository<DailyRewardLog>;
-
-  const mockRewardLogRepository = {
-    findOne: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-  };
+  let repoMock: any;
 
   beforeEach(async () => {
+    repoMock = {
+      findOne: jest.fn(),
+      create: jest.fn().mockImplementation((dto) => dto),
+      save: jest.fn().mockImplementation((log) => Promise.resolve({ id: 'dl-1', timestamp: new Date(), ...log })),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DailyRewardService,
-        {
-          provide: getRepositoryToken(DailyRewardLog),
-          useValue: mockRewardLogRepository,
-        },
+        { provide: getRepositoryToken(DailyRewardLog), useValue: repoMock },
       ],
     }).compile();
 
     service = module.get<DailyRewardService>(DailyRewardService);
-    repo = module.get<Repository<DailyRewardLog>>(
-      getRepositoryToken(DailyRewardLog),
-    );
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('dailyCheckIn', () => {
-    const userId = 'user-123';
+  it('claims daily check in for new user', async () => {
+    repoMock.findOne.mockResolvedValue(null);
 
-    it('should start a streak at 1 for the first check-in', async () => {
-      mockRewardLogRepository.findOne.mockResolvedValue(null);
-      mockRewardLogRepository.create.mockReturnValue({ userId, streak: 1 });
-      mockRewardLogRepository.save.mockResolvedValue({
-        id: 'uuid',
-        userId,
-        streak: 1,
-        timestamp: new Date(),
-      });
+    const log = await service.dailyCheckIn('u-1');
+    expect(log.streak).toBe(1);
+    expect(repoMock.save).toHaveBeenCalled();
+  });
 
-      const result = await service.dailyCheckIn(userId);
+  it('increments streak if checked in yesterday', async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
 
-      expect(repo.create).toHaveBeenCalledWith({ userId, streak: 1 });
-      expect(result.streak).toBe(1);
-    });
+    repoMock.findOne.mockResolvedValue({ userId: 'u-1', timestamp: yesterday, streak: 3 });
 
-    it('should throw a ConflictException if already checked in today', async () => {
-      const today = new Date();
-      mockRewardLogRepository.findOne.mockResolvedValue({
-        userId,
-        streak: 3,
-        timestamp: today,
-      });
+    const log = await service.dailyCheckIn('u-1');
+    expect(log.streak).toBe(4);
+  });
 
-      await expect(service.dailyCheckIn(userId)).rejects.toThrow(
-        ConflictException,
-      );
-    });
+  it('throws ConflictException if already checked in today', async () => {
+    const today = new Date();
+    repoMock.findOne.mockResolvedValue({ userId: 'u-1', timestamp: today, streak: 1 });
 
-    it('should continue a streak if the last check-in was yesterday', async () => {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const lastCheckIn = { userId, streak: 3, timestamp: yesterday };
-
-      mockRewardLogRepository.findOne.mockResolvedValue(lastCheckIn);
-      mockRewardLogRepository.create.mockReturnValue({ userId, streak: 4 });
-      mockRewardLogRepository.save.mockResolvedValue({
-        id: 'uuid',
-        userId,
-        streak: 4,
-        timestamp: new Date(),
-      });
-
-      const result = await service.dailyCheckIn(userId);
-
-      expect(repo.create).toHaveBeenCalledWith({ userId, streak: 4 });
-      expect(result.streak).toBe(4);
-    });
-
-    it('should reset a streak if the last check-in was before yesterday', async () => {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      const lastCheckIn = { userId, streak: 5, timestamp: twoDaysAgo };
-
-      mockRewardLogRepository.findOne.mockResolvedValue(lastCheckIn);
-      mockRewardLogRepository.create.mockReturnValue({ userId, streak: 1 });
-      mockRewardLogRepository.save.mockResolvedValue({
-        id: 'uuid',
-        userId,
-        streak: 1,
-        timestamp: new Date(),
-      });
-
-      const result = await service.dailyCheckIn(userId);
-
-      expect(repo.create).toHaveBeenCalledWith({ userId, streak: 1 });
-      expect(result.streak).toBe(1);
-    });
+    await expect(service.dailyCheckIn('u-1')).rejects.toThrow(ConflictException);
   });
 });

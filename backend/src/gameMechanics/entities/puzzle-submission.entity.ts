@@ -1,45 +1,44 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
-import { Challenge } from './challenge.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm"
+import { User } from "./user.entity"
+import { Challenge } from "./challenge.entity"
 
-@Entity('puzzle_submissions')
+@Entity("puzzle_submissions")
 export class PuzzleSubmission {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn("uuid")
+  id: string
 
-  @Column('uuid')
-  userId: string;
+  @Column({ type: "uuid", length: 128 })
+  userId: string
 
-  @Column('uuid')
-  challengeId: string;
+  @Column("uuid")
+  challengeId: string
 
-  @Column('text')
-  submittedAnswer: string;
+  @Column("text")
+  submittedAnswer: string
 
-  @Column({ type: 'boolean' })
-  isCorrect: boolean;
+  @Column({ type: "boolean" })
+  isCorrect: boolean
 
-  @Column({ type: 'int', nullable: true })
-  timeTaken: number; // in seconds
+  @Column({ type: "int", nullable: true })
+  timeTaken: number // in seconds
 
-  @Column({ type: 'inet', nullable: true })
-  ipAddress: string;
+  @Column({ type: "inet", nullable: true })
+  ipAddress: string
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt: Date
 
-  @ManyToOne(() => User, (user) => user.submissions)
-  @JoinColumn({ name: 'userId' })
-  user: User;
+  @ManyToOne(
+    () => User,
+    (user) => user.submissions,
+  )
+  @JoinColumn({ name: "userId" })
+  user: User
 
-  @ManyToOne(() => Challenge, (challenge) => challenge.submissions)
-  @JoinColumn({ name: 'challengeId' })
-  challenge: Challenge;
+  @ManyToOne(
+    () => Challenge,
+    (challenge) => challenge.submissions,
+  )
+  @JoinColumn({ name: "challengeId" })
+  challenge: Challenge
 }

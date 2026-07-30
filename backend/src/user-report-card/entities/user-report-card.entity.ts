@@ -11,7 +11,7 @@ export class ReportCard {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, length: 128 })
   userId: string;
 
   @Column('int', { default: 0 })

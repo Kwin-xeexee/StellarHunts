@@ -51,11 +51,15 @@ export class AnalyticsController implements OnModuleInit {
   }
 
   @Get('puzzles/most-solved')
-  async getMostSolvedPuzzles(): Promise<
-    Array<{ puzzleId: string; solveCount: number }>
-  > {
+  async getMostSolvedPuzzles(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
     this.logger.log('Handling request for most solved puzzles.');
-    return this.analyticsService.getMostSolvedPuzzlesAsync();
+    return this.analyticsService.getMostSolvedPuzzlesAsync(
+      limit ? Number(limit) : undefined,
+      offset ? Number(offset) : undefined,
+    );
   }
 
   @Get('puzzles/:puzzleId/average-solve-time')

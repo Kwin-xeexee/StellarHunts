@@ -41,6 +41,7 @@ export class Feedback {
   @Column({
     type: 'uuid',
     nullable: true,
+    length: 128,
   })
   userId: string; // null if anonymous
 

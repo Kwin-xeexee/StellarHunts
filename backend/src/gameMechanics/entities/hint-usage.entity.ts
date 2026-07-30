@@ -1,39 +1,38 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
-import { Challenge } from './challenge.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm"
+import { User } from "./user.entity"
+import { Challenge } from "./challenge.entity"
 
-@Entity('hint_usages')
+@Entity("hint_usages")
 export class HintUsage {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn("uuid")
+  id: string
 
-  @Column('uuid')
-  userId: string;
+  @Column({ type: "uuid", length: 128 })
+  userId: string
 
-  @Column('uuid')
-  challengeId: string;
+  @Column("uuid")
+  challengeId: string
 
-  @Column({ type: 'int' })
-  hintIndex: number;
+  @Column({ type: "int" })
+  hintIndex: number
 
-  @Column('text')
-  hintContent: string;
+  @Column("text")
+  hintContent: string
 
   @CreateDateColumn()
-  usedAt: Date;
+  usedAt: Date
 
-  @ManyToOne(() => User, (user) => user.hintUsages)
-  @JoinColumn({ name: 'userId' })
-  user: User;
+  @ManyToOne(
+    () => User,
+    (user) => user.hintUsages,
+  )
+  @JoinColumn({ name: "userId" })
+  user: User
 
-  @ManyToOne(() => Challenge, (challenge) => challenge.hintUsages)
-  @JoinColumn({ name: 'challengeId' })
-  challenge: Challenge;
+  @ManyToOne(
+    () => Challenge,
+    (challenge) => challenge.hintUsages,
+  )
+  @JoinColumn({ name: "challengeId" })
+  challenge: Challenge
 }

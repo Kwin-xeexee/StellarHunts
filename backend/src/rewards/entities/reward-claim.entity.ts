@@ -18,7 +18,7 @@ export class RewardClaim {
   id: string;
 
   @ApiProperty({ description: 'User ID who claimed the reward' })
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 128 })
   userId: string;
 
   @ApiProperty({ description: 'Reward ID that was claimed' })

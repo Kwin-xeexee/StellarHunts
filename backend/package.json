@@ -47,6 +47,7 @@
     "class-validator": "^0.14.2",
     "dotenv": "^16.4.7",
     "ioredis": "^5.6.1",
+    "helmet": "^8.0.0",
     "ip2location-nodejs": "^9.6.3",
     "joi": "^17.0.0",
     "multer": "^1.4.5-lts.2",
@@ -109,6 +110,14 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "branches": 60,
+        "functions": 60,
+        "lines": 60,
+        "statements": 60
+      }
+    }
   }
 }
