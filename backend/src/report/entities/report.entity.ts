@@ -24,7 +24,7 @@ export class Report {
   @Column()
   puzzleId: number;
 
-  @Column()
+  @Column({ length: 128 })
   userId: number;
 
   @Column()

@@ -11,7 +11,7 @@ export class Progress {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', unique: true })
+  @Column({ type: 'uuid', unique: true, length: 128 })
   userId: string;
 
   @Column({ default: 0 })

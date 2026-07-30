@@ -5,7 +5,7 @@ export class UserRank {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ length: 128 })
   @Index({ unique: true })
   userId: string;
 

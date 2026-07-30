@@ -123,4 +123,57 @@ fn bench_ten_submit_answers_amortised() {
         "amortised submit_answer CPU budget exceeded: {} avg instructions",
         avg_cpu
     );
+
+    #[test]
+fn bench_submit_answer_cpu_budget() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let contract_id = env.register_contract(None, StellarHunts);
+    let client = StellarHuntsClient::new(&env, &contract_id);
+    client.init(&admin);
+
+    client.set_question_per_level(&1u32);
+    let level = crate::Levels::Easy;
+    let question = b(&env, "Bench question");
+    let answer = b(&env, "Bench answer");
+    let hint = b(&env, "Bench hint");
+    client.add_question(&level, &question, &answer, &hint);
+
+    let player = Address::generate(&env);
+
+    // Reset the budget so we only measure the submit_answer call itself.
+    let mut budget = env.budget();
+    budget.reset_default();
+
+    let ok = client.submit_answer(&player, &1u64, &answer);
+    assert!(ok);
+
+    let cpu = budget.cpu_instruction_cost();
+    let mem = budget.memory_bytes_cost();
+
+    // Log diagnostics when run with --nocapture.
+    eprintln!(
+        "submit_answer budget  cpu={}  mem={} bytes",
+        cpu, mem
+    );
+
+    // Budget ceiling: 5M CPU instructions is generous for a single
+    // submit_answer call (typical is ~200-500k). If this ever trips,
+    // investigate what storage or crypto work is being done on the hot
+    // path.
+    assert!(
+        cpu < 5_000_000,
+        "submit_answer CPU budget exceeded: {} instructions (max 5_000_000)",
+        cpu
+    );
+
+    // Memory ceiling: 128 KB.
+    assert!(
+        mem < 131_072,
+        "submit_answer memory budget exceeded: {} bytes (max 131_072)",
+        mem
+    );
+}
 }

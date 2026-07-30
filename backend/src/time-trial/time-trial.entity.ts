@@ -1,37 +1,31 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  Index,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from "typeorm"
 
-@Entity('time_trials')
+@Entity("time_trials")
 export class TimeTrial {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn("uuid")
+  id: string
 
-  @Column('uuid')
+  @Column({ type: "uuid", length: 128 })
   @Index()
-  userId: string;
+  userId: string
 
-  @Column('uuid')
+  @Column("uuid")
   @Index()
-  puzzleId: string;
+  puzzleId: string
 
-  @Column({ type: 'timestamp' })
-  startTime: Date;
+  @Column({ type: "timestamp" })
+  startTime: Date
 
-  @Column({ type: 'timestamp', nullable: true })
-  endTime: Date;
+  @Column({ type: "timestamp", nullable: true })
+  endTime: Date
 
   @Column({ default: false })
-  completed: boolean;
+  completed: boolean
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt: Date
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt: Date
+
 }

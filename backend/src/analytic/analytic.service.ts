@@ -62,14 +62,18 @@ export class AnalyticService {
    */
   async getMostSolvedPuzzlesAsync(
     limit?: number,
+    offset?: number,
   ): Promise<Array<{ puzzleId: string; solveCount: number }>> {
     this.logger.log('Fetching most solved puzzles...');
     const sql = limit
       ? `SELECT puzzle_id, solve_count FROM puzzle_stats_mv
-         ORDER BY solve_count DESC LIMIT $1`
-      : `SELECT puzzle_id, solve_count FROM puzzle_stats_mv
-         ORDER BY solve_count DESC`;
-    const params = limit ? [limit] : [];
+         ORDER BY solve_count DESC LIMIT $1 OFFSET $2`
+      : offset
+        ? `SELECT puzzle_id, solve_count FROM puzzle_stats_mv
+           ORDER BY solve_count DESC OFFSET $1`
+        : `SELECT puzzle_id, solve_count FROM puzzle_stats_mv
+           ORDER BY solve_count DESC`;
+    const params = limit ? [limit, offset ?? 0] : offset ? [offset] : [];
     const { rows } = await this.pool.query(sql, params);
     return rows.map((r) => ({
       puzzleId: r.puzzle_id as string,
