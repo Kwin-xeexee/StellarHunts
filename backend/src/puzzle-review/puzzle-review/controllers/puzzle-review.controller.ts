@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Query,
+  Req,
   Logger,
   ParseUUIDPipe,
   ParseIntPipe,
@@ -78,15 +79,17 @@ export class PuzzleReviewController {
     status: 201,
     description: 'Review submitted successfully',
   })
-  async createReview(reviewData: CreateReviewDto): Promise<{
+  async createReview(
+    @Req() request: Request,
+    reviewData: CreateReviewDto,
+  ): Promise<{
     success: boolean;
     message: string;
     data: ReviewResponse;
   }> {
-    const request: Request = {} as Request; // Temporary workaround for @Req() decorator issue
     this.logger.log(`Creating review for puzzle: ${reviewData.puzzleId}`);
 
-    const ipAddress = request.ip || request.connection.remoteAddress;
+    const ipAddress = request.ip || (request as any).connection?.remoteAddress;
 
     const review = await this.reviewService.createReview(reviewData, ipAddress);
 
