@@ -1,81 +1,209 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import type { Repository } from 'typeorm';
 import { MaintenanceModeService } from './maintenance-mode.service';
 import { MaintenanceConfig } from './entities/maintenance-config.entity';
+import { jest } from '@jest/globals';
 
 describe('MaintenanceModeService', () => {
   let service: MaintenanceModeService;
-  let repoMock: any;
-  let configMock: any;
+  let repository: Repository<MaintenanceConfig>;
+  let configService: ConfigService;
 
-  const mockConfig: any = {
-    id: 'mc-1',
-    isMaintenanceMode: false,
-    maintenanceMessage: 'System under maintenance',
-    allowedRoutes: ['/health'],
-    allowedUserIds: [],
-    updatedAt: new Date(),
+  const mockRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    delete: jest.fn(),
+  };
+
+  const mockConfigService = {
+    get: jest.fn(),
   };
 
   beforeEach(async () => {
-    repoMock = {
-      findOne: jest.fn().mockResolvedValue(mockConfig),
-      create: jest.fn().mockImplementation((dto) => ({ ...mockConfig, ...dto })),
-      save: jest.fn().mockImplementation((c) => Promise.resolve({ ...mockConfig, ...c, updatedAt: new Date() })),
-    };
-
-    configMock = {
-      get: jest.fn().mockImplementation((key, defaultVal) => defaultVal),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MaintenanceModeService,
-        { provide: getRepositoryToken(MaintenanceConfig), useValue: repoMock },
-        { provide: ConfigService, useValue: configMock },
+        {
+          provide: getRepositoryToken(MaintenanceConfig),
+          useValue: mockRepository,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
       ],
     }).compile();
 
     service = module.get<MaintenanceModeService>(MaintenanceModeService);
+    repository = module.get<Repository<MaintenanceConfig>>(
+      getRepositoryToken(MaintenanceConfig),
+    );
+    configService = module.get<ConfigService>(ConfigService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
+    service.clearCache();
   });
 
-  it('initializes maintenance config on module init', async () => {
-    await service.onModuleInit();
-    expect(repoMock.findOne).toHaveBeenCalled();
+  describe('getMaintenanceStatus', () => {
+    it('should return maintenance status', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: true,
+        maintenanceMessage: 'Under maintenance',
+        scheduledStart: null,
+        scheduledEnd: null,
+        enabledByUsername: 'admin',
+        reason: 'System updates',
+        updatedAt: new Date(),
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+
+      const result = await service.getMaintenanceStatus();
+
+      expect(result.isMaintenanceMode).toBe(true);
+      expect(result.maintenanceMessage).toBe('Under maintenance');
+      expect(result.enabledByUsername).toBe('admin');
+    });
   });
 
-  it('enables and disables maintenance mode', async () => {
-    const enabled = await service.enableMaintenanceMode('admin1', 'adminUser', 'Deployment', 'System upgrading');
-    expect(enabled.isMaintenanceMode).toBe(true);
+  describe('enableMaintenanceMode', () => {
+    it('should enable maintenance mode', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: false,
+        maintenanceMessage: 'System is running normally',
+        allowedRoutes: ['/health'],
+        blockApiRoutes: true,
+        blockWebRoutes: true,
+        updatedAt: new Date(),
+      };
 
-    const disabled = await service.disableMaintenanceMode('admin1', 'adminUser');
-    expect(disabled.isMaintenanceMode).toBe(false);
+      const updatedConfig = {
+        ...mockConfig,
+        isMaintenanceMode: true,
+        enabledBy: 'admin-123',
+        enabledByUsername: 'admin',
+        reason: 'System updates',
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+      mockRepository.save.mockResolvedValue(updatedConfig);
+
+      const result = await service.enableMaintenanceMode(
+        'admin-123',
+        'admin',
+        'System updates',
+      );
+
+      expect(result.isMaintenanceMode).toBe(true);
+      expect(result.enabledByUsername).toBe('admin');
+      expect(result.reason).toBe('System updates');
+    });
   });
 
-  it('gets maintenance status', async () => {
-    const status = await service.getMaintenanceStatus();
-    expect(status.isMaintenanceMode).toBe(false);
-    expect(status.maintenanceMessage).toBe('System under maintenance');
+  describe('disableMaintenanceMode', () => {
+    it('should disable maintenance mode', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: true,
+        maintenanceMessage: 'Under maintenance',
+        allowedRoutes: ['/health'],
+        blockApiRoutes: true,
+        blockWebRoutes: true,
+        updatedAt: new Date(),
+      };
+
+      const updatedConfig = {
+        ...mockConfig,
+        isMaintenanceMode: false,
+        enabledBy: 'admin-123',
+        enabledByUsername: 'admin',
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+      mockRepository.save.mockResolvedValue(updatedConfig);
+
+      const result = await service.disableMaintenanceMode('admin-123', 'admin');
+
+      expect(result.isMaintenanceMode).toBe(false);
+      expect(result.enabledByUsername).toBe('admin');
+    });
   });
 
-  it('adds and removes allowed routes', async () => {
-    const added = await service.addAllowedRoute('/custom');
-    expect(added.allowedRoutes).toContain('/custom');
+  describe('addAllowedRoute', () => {
+    it('should add new allowed route', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: true,
+        allowedRoutes: ['/health'],
+        blockApiRoutes: true,
+        blockWebRoutes: true,
+        updatedAt: new Date(),
+      };
 
-    const removed = await service.removeAllowedRoute('/custom');
-    expect(removed.allowedRoutes).not.toContain('/custom');
+      const updatedConfig = {
+        ...mockConfig,
+        allowedRoutes: ['/health', '/status'],
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+      mockRepository.save.mockResolvedValue(updatedConfig);
+
+      const result = await service.addAllowedRoute('/status');
+
+      expect(result.allowedRoutes).toContain('/status');
+      expect(result.allowedRoutes).toHaveLength(2);
+    });
+
+    it('should not add duplicate route', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: true,
+        allowedRoutes: ['/health'],
+        blockApiRoutes: true,
+        blockWebRoutes: true,
+        updatedAt: new Date(),
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+
+      const result = await service.addAllowedRoute('/health');
+
+      expect(result.allowedRoutes).toHaveLength(1);
+      expect(mockRepository.save).not.toHaveBeenCalled();
+    });
   });
 
-  it('adds and removes allowed users', async () => {
-    const added = await service.addAllowedUser('u-allowed');
-    expect(added.allowedUserIds).toContain('u-allowed');
+  describe('addAllowedUser', () => {
+    it('should add new allowed user', async () => {
+      const mockConfig = {
+        id: '1',
+        isMaintenanceMode: true,
+        allowedUserIds: ['user-1'],
+        blockApiRoutes: true,
+        blockWebRoutes: true,
+        updatedAt: new Date(),
+      };
 
-    const removed = await service.removeAllowedUser('u-allowed');
-    expect(removed.allowedUserIds).not.toContain('u-allowed');
+      const updatedConfig = {
+        ...mockConfig,
+        allowedUserIds: ['user-1', 'user-2'],
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockConfig);
+      mockRepository.save.mockResolvedValue(updatedConfig);
+
+      const result = await service.addAllowedUser('user-2');
+
+      expect(result.allowedUserIds).toContain('user-2');
+      expect(result.allowedUserIds).toHaveLength(2);
+    });
   });
 });

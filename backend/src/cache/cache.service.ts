@@ -55,7 +55,9 @@ export class CacheService {
         return JSON.parse(cached) as T;
       } catch (err) {
         // Corrupt cache entry — drop it and fall through to the loader.
-        this.logger.warn(`Redis returned non-JSON for key "${key}": ${(err as Error).message}.`);
+        this.logger.warn(
+          `Redis returned non-JSON for key "${key}": ${(err as Error).message}.`,
+        );
       }
     }
 
@@ -73,7 +75,9 @@ export class CacheService {
       try {
         const fresh = await loader();
         try {
-          const ttl = baseTtlSeconds + Math.floor(Math.random() * Math.max(1, jitterSeconds));
+          const ttl =
+            baseTtlSeconds +
+            Math.floor(Math.random() * Math.max(1, jitterSeconds));
           await this.redis.set(key, JSON.stringify(fresh), 'EX', ttl);
         } catch (err) {
           this.logger.warn(

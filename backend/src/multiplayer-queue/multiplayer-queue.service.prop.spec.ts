@@ -41,9 +41,15 @@ const queuePlayerArb: fc.Arbitrary<Queue> = fc.record({
   waitTime: waitTimeArb,
   matchId: fc.constant(null),
   preferences: fc.record({
-    maxWaitTime: fc.option(fc.integer({ min: 30, max: 1800 }), { nil: undefined }),
-    preferredOpponents: fc.option(fc.array(uuidArb, { maxLength: 5 }), { nil: undefined }),
-    avoidOpponents: fc.option(fc.array(uuidArb, { maxLength: 5 }), { nil: undefined }),
+    maxWaitTime: fc.option(fc.integer({ min: 30, max: 1800 }), {
+      nil: undefined,
+    }),
+    preferredOpponents: fc.option(fc.array(uuidArb, { maxLength: 5 }), {
+      nil: undefined,
+    }),
+    avoidOpponents: fc.option(fc.array(uuidArb, { maxLength: 5 }), {
+      nil: undefined,
+    }),
   }),
   createdAt: fc.date({ min: new Date(0), max: new Date() }),
   matchedAt: fc.constant(null),
@@ -51,7 +57,10 @@ const queuePlayerArb: fc.Arbitrary<Queue> = fc.record({
 } as unknown as fc.Record<Queue>);
 
 /** A batch of players in the queue. */
-const queuePlayerBatchArb = fc.array(queuePlayerArb, { minLength: 0, maxLength: 30 });
+const queuePlayerBatchArb = fc.array(queuePlayerArb, {
+  minLength: 0,
+  maxLength: 30,
+});
 
 /** A DTO for joining the queue (valid inputs). */
 const joinQueueDtoArb = fc.record({
@@ -59,9 +68,15 @@ const joinQueueDtoArb = fc.record({
   username: usernameArb,
   skillLevel: skillLevelArb,
   gameMode: fc.option(gameModeArb, { nil: undefined }),
-  maxWaitTime: fc.option(fc.integer({ min: 30, max: 1800 }), { nil: undefined }),
-  preferredOpponents: fc.option(fc.array(uuidArb, { maxLength: 3 }), { nil: undefined }),
-  avoidOpponents: fc.option(fc.array(uuidArb, { maxLength: 3 }), { nil: undefined }),
+  maxWaitTime: fc.option(fc.integer({ min: 30, max: 1800 }), {
+    nil: undefined,
+  }),
+  preferredOpponents: fc.option(fc.array(uuidArb, { maxLength: 3 }), {
+    nil: undefined,
+  }),
+  avoidOpponents: fc.option(fc.array(uuidArb, { maxLength: 3 }), {
+    nil: undefined,
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -104,17 +119,31 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('is symmetric for neutral players (no preferences)', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
           const a: Queue = {
-            ...p1, id: 'p1', userId: 'u1',
-            preferences: { ...p1.preferences, avoidOpponents: undefined, preferredOpponents: undefined },
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
+            preferences: {
+              ...p1.preferences,
+              avoidOpponents: undefined,
+              preferredOpponents: undefined,
+            },
           };
           const b: Queue = {
-            ...p2, id: 'p2', userId: 'u2',
-            preferences: { ...p2.preferences, avoidOpponents: undefined, preferredOpponents: undefined },
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
+            preferences: {
+              ...p2.preferences,
+              avoidOpponents: undefined,
+              preferredOpponents: undefined,
+            },
           };
           const sAB = score(service, a, b);
           const sBA = score(service, b, a);
@@ -128,16 +157,22 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('returns -1 when either player avoids the other', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
           const a: Queue = {
-            ...p1, id: 'p1', userId: 'u1',
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
             preferences: { ...p1.preferences, avoidOpponents: ['u2'] },
           };
           const b: Queue = {
-            ...p2, id: 'p2', userId: 'u2',
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
             preferences: { ...p2.preferences, avoidOpponents: undefined },
           };
           expect(score(service, a, b)).toBe(-1);
@@ -149,17 +184,31 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('returns 100 for mutual preferredOpponents', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
           const a: Queue = {
-            ...p1, id: 'p1', userId: 'u1',
-            preferences: { ...p1.preferences, preferredOpponents: ['u2'], avoidOpponents: undefined },
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
+            preferences: {
+              ...p1.preferences,
+              preferredOpponents: ['u2'],
+              avoidOpponents: undefined,
+            },
           };
           const b: Queue = {
-            ...p2, id: 'p2', userId: 'u2',
-            preferences: { ...p2.preferences, preferredOpponents: ['u1'], avoidOpponents: undefined },
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
+            preferences: {
+              ...p2.preferences,
+              preferredOpponents: ['u1'],
+              avoidOpponents: undefined,
+            },
           };
           expect(score(service, a, b)).toBe(100);
         }),
@@ -170,12 +219,16 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('scores avoidOpponents over preferredOpponents', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
           const a: Queue = {
-            ...p1, id: 'p1', userId: 'u1',
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
             preferences: {
               ...p1.preferences,
               preferredOpponents: ['u2'],
@@ -183,7 +236,9 @@ describe('MultiplayerQueueService — property-based', () => {
             },
           };
           const b: Queue = {
-            ...p2, id: 'p2', userId: 'u2',
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
             preferences: { ...p2.preferences, avoidOpponents: undefined },
           };
           // avoidOpponents takes priority over preferredOpponents
@@ -206,10 +261,15 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('every player in a pair is compatible (no avoidOpponents violated)', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       // Batch of 6 players with random avoidOpponents
-      const playerBatch6Arb = fc.array(queuePlayerArb, { minLength: 4, maxLength: 8 });
+      const playerBatch6Arb = fc.array(queuePlayerArb, {
+        minLength: 4,
+        maxLength: 8,
+      });
 
       await fc.assert(
         fc.property(playerBatch6Arb, (players) => {
@@ -230,9 +290,10 @@ describe('MultiplayerQueueService — property-based', () => {
           // Map avoidOpponents to actual indices
           for (const p of indexed) {
             if (p.preferences?.avoidOpponents) {
-              p.preferences.avoidOpponents = p.preferences.avoidOpponents.filter(
-                (uid) => indexed.some((op) => op.userId === uid),
-              );
+              p.preferences.avoidOpponents =
+                p.preferences.avoidOpponents.filter((uid) =>
+                  indexed.some((op) => op.userId === uid),
+                );
             }
           }
 
@@ -240,8 +301,10 @@ describe('MultiplayerQueueService — property-based', () => {
 
           // Verify no pair violates avoidOpponents
           for (const [a, b] of pairs) {
-            const aAvoidsB = a.preferences?.avoidOpponents?.includes(b.userId) ?? false;
-            const bAvoidsA = b.preferences?.avoidOpponents?.includes(a.userId) ?? false;
+            const aAvoidsB =
+              a.preferences?.avoidOpponents?.includes(b.userId) ?? false;
+            const bAvoidsA =
+              b.preferences?.avoidOpponents?.includes(a.userId) ?? false;
             expect(aAvoidsB || bAvoidsA).toBe(false);
           }
         }),
@@ -252,9 +315,14 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('never matches a player twice', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
-      const playerBatchArb = fc.array(queuePlayerArb, { minLength: 2, maxLength: 20 });
+      const playerBatchArb = fc.array(queuePlayerArb, {
+        minLength: 2,
+        maxLength: 20,
+      });
 
       await fc.assert(
         fc.property(playerBatchArb, (players) => {
@@ -281,7 +349,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('leftover count is at most 1 (odd group leaves 1 unmatched)', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(
@@ -311,7 +381,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('result is deterministic', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(
@@ -347,7 +419,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('every input player appears in at least one group', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerBatchArb, (players) => {
@@ -364,7 +438,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('players in a same-mode-skill group share gameMode and skillLevel', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerBatchArb, (players) => {
@@ -395,7 +471,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('cross-skill groups only contain long-waiting players (waitTime > 120)', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerBatchArb, (players) => {
@@ -428,7 +506,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('no cross-skill group created when fewer than 2 long-waiting players exist', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerBatchArb, (players) => {
@@ -460,21 +540,19 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('is symmetric with respect to avoidOpponents', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
-        fc.property(
-          queuePlayerArb,
-          queuePlayerArb,
-          (p1, p2) => {
-            // Ensure different IDs
-            const a: Queue = { ...p1, id: 'p1', userId: 'u1' };
-            const b: Queue = { ...p2, id: 'p2', userId: 'u2' };
-            const resultAB = checkCompatibility(service, [a, b]);
-            const resultBA = checkCompatibility(service, [b, a]);
-            expect(resultAB).toBe(resultBA);
-          },
-        ),
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          // Ensure different IDs
+          const a: Queue = { ...p1, id: 'p1', userId: 'u1' };
+          const b: Queue = { ...p2, id: 'p2', userId: 'u2' };
+          const resultAB = checkCompatibility(service, [a, b]);
+          const resultBA = checkCompatibility(service, [b, a]);
+          expect(resultAB).toBe(resultBA);
+        }),
       );
 
       module.close();
@@ -482,18 +560,26 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('returns true when neither player has avoidOpponents', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
-        fc.property(
-          queuePlayerArb,
-          queuePlayerArb,
-          (p1, p2) => {
-            const a: Queue = { ...p1, id: 'p1', userId: 'u1', preferences: { ...p1.preferences, avoidOpponents: undefined } };
-            const b: Queue = { ...p2, id: 'p2', userId: 'u2', preferences: { ...p2.preferences, avoidOpponents: undefined } };
-            expect(checkCompatibility(service, [a, b])).toBe(true);
-          },
-        ),
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
+            preferences: { ...p1.preferences, avoidOpponents: undefined },
+          };
+          const b: Queue = {
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
+            preferences: { ...p2.preferences, avoidOpponents: undefined },
+          };
+          expect(checkCompatibility(service, [a, b])).toBe(true);
+        }),
       );
 
       module.close();
@@ -501,24 +587,26 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('returns false when one player avoids the other', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
-        fc.property(
-          queuePlayerArb,
-          queuePlayerArb,
-          (p1, p2) => {
-            const a: Queue = {
-              ...p1, id: 'p1', userId: 'u1',
-              preferences: { ...p1.preferences, avoidOpponents: ['u2'] },
-            };
-            const b: Queue = {
-              ...p2, id: 'p2', userId: 'u2',
-              preferences: { ...p2.preferences, avoidOpponents: undefined },
-            };
-            expect(checkCompatibility(service, [a, b])).toBe(false);
-          },
-        ),
+        fc.property(queuePlayerArb, queuePlayerArb, (p1, p2) => {
+          const a: Queue = {
+            ...p1,
+            id: 'p1',
+            userId: 'u1',
+            preferences: { ...p1.preferences, avoidOpponents: ['u2'] },
+          };
+          const b: Queue = {
+            ...p2,
+            id: 'p2',
+            userId: 'u2',
+            preferences: { ...p2.preferences, avoidOpponents: undefined },
+          };
+          expect(checkCompatibility(service, [a, b])).toBe(false);
+        }),
       );
 
       module.close();
@@ -526,7 +614,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
     it('single player is always compatible with themselves', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, (player) => {
@@ -547,7 +637,10 @@ describe('MultiplayerQueueService — property-based', () => {
             fc.record({
               skillLevel: skillLevelArb,
               gameMode: gameModeArb,
-              createdAt: fc.date({ min: new Date(Date.now() - 86400000), max: new Date() }),
+              createdAt: fc.date({
+                min: new Date(Date.now() - 86400000),
+                max: new Date(),
+              }),
             }),
             { minLength: 0, maxLength: 20 },
           ),
@@ -564,18 +657,26 @@ describe('MultiplayerQueueService — property-based', () => {
             mocks.queueRepository.find.mockResolvedValue(entriesWithWait);
             mocks.matchRepository.count.mockResolvedValue(matchesToday);
 
-            const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+            const service = module.get<MultiplayerQueueService>(
+              MultiplayerQueueService,
+            );
             const stats = await service.getQueueStats();
 
             // totalInQueue = number of waiting entries
             expect(stats.totalInQueue).toBe(waitingEntries.length);
 
             // totalInQueue = sum of bySkillLevel
-            const skillSum = Object.values(stats.bySkillLevel).reduce((a, b) => a + b, 0);
+            const skillSum = Object.values(stats.bySkillLevel).reduce(
+              (a, b) => a + b,
+              0,
+            );
             expect(skillSum).toBe(waitingEntries.length);
 
             // totalInQueue = sum of byGameMode
-            const modeSum = Object.values(stats.byGameMode).reduce((a, b) => a + b, 0);
+            const modeSum = Object.values(stats.byGameMode).reduce(
+              (a, b) => a + b,
+              0,
+            );
             expect(modeSum).toBe(waitingEntries.length);
 
             // Non-negative values
@@ -585,7 +686,9 @@ describe('MultiplayerQueueService — property-based', () => {
 
             // averageWaitTime and longestWaitTime consistency
             if (waitingEntries.length > 0) {
-              expect(stats.averageWaitTime).toBeLessThanOrEqual(stats.longestWaitTime);
+              expect(stats.averageWaitTime).toBeLessThanOrEqual(
+                stats.longestWaitTime,
+              );
             } else {
               expect(stats.averageWaitTime).toBe(0);
               expect(stats.longestWaitTime).toBe(0);
@@ -600,16 +703,15 @@ describe('MultiplayerQueueService — property-based', () => {
 
   // ── mapToQueueStatusDto ─────────────────────────────────────────────
   describe('mapToQueueStatusDto', () => {
-    function mapDto(
-      service: MultiplayerQueueService,
-      queue: Queue,
-    ): unknown {
+    function mapDto(service: MultiplayerQueueService, queue: Queue): unknown {
       return (service as any).mapToQueueStatusDto(queue);
     }
 
     it('preserves all fields through the mapping', async () => {
       const { mocks, module } = await buildModule();
-      const service = module.get<MultiplayerQueueService>(MultiplayerQueueService);
+      const service = module.get<MultiplayerQueueService>(
+        MultiplayerQueueService,
+      );
 
       await fc.assert(
         fc.property(queuePlayerArb, (player) => {

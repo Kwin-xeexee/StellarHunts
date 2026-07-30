@@ -1,17 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common"
-import { type Repository, LessThan, MoreThan, DataSource } from "typeorm"
-import { Cron, CronExpression } from "@nestjs/schedule"
-import { type Queue, QueueStatus, SkillLevel } from "./entities/queue.entity"
-import type { Match } from "./entities/match.entity"
-import { Match as MatchEntity } from "./entities/match.entity"
-import type { JoinQueueDto } from "./dto/join-queue.dto"
-import type { QueueStatusDto } from "./dto/queue-status.dto"
-import type { MatchResultDto } from "./dto/match-result.dto"
-import type { QueueStatsDto } from "./dto/queue-stats.dto"
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { type Repository, LessThan, MoreThan, DataSource } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { type Queue, QueueStatus, SkillLevel } from './entities/queue.entity';
+import type { Match } from './entities/match.entity';
+import { Match as MatchEntity } from './entities/match.entity';
+import type { JoinQueueDto } from './dto/join-queue.dto';
+import type { QueueStatusDto } from './dto/queue-status.dto';
+import type { MatchResultDto } from './dto/match-result.dto';
+import type { QueueStatsDto } from './dto/queue-stats.dto';
 
 @Injectable()
 export class MultiplayerQueueService {
-  private readonly logger = new Logger(MultiplayerQueueService.name)
+  private readonly logger = new Logger(MultiplayerQueueService.name);
 
   constructor(
     private readonly queueRepository: Repository<Queue>,
@@ -29,10 +34,10 @@ export class MultiplayerQueueService {
         userId: joinQueueDto.userId,
         status: QueueStatus.WAITING,
       },
-    })
+    });
 
     if (existingEntry) {
-      throw new BadRequestException("User is already in queue")
+      throw new BadRequestException('User is already in queue');
     }
 
     // Create queue entry
@@ -40,21 +45,21 @@ export class MultiplayerQueueService {
       userId: joinQueueDto.userId,
       username: joinQueueDto.username,
       skillLevel: joinQueueDto.skillLevel,
-      gameMode: joinQueueDto.gameMode || "classic",
+      gameMode: joinQueueDto.gameMode || 'classic',
       preferences: {
         maxWaitTime: joinQueueDto.maxWaitTime,
         preferredOpponents: joinQueueDto.preferredOpponents,
         avoidOpponents: joinQueueDto.avoidOpponents,
       },
-    })
+    });
 
-    const savedEntry = await this.queueRepository.save(queueEntry)
-    this.logger.log(`User ${joinQueueDto.username} joined queue`)
+    const savedEntry = await this.queueRepository.save(queueEntry);
+    this.logger.log(`User ${joinQueueDto.username} joined queue`);
 
     // Try immediate matchmaking
-    await this.processMatchmaking()
+    await this.processMatchmaking();
 
-    return this.mapToQueueStatusDto(savedEntry)
+    return this.mapToQueueStatusDto(savedEntry);
   }
 
   /**
@@ -66,17 +71,17 @@ export class MultiplayerQueueService {
         userId,
         status: QueueStatus.WAITING,
       },
-    })
+    });
 
     if (!queueEntry) {
-      throw new NotFoundException("User not found in queue")
+      throw new NotFoundException('User not found in queue');
     }
 
-    queueEntry.status = QueueStatus.LEFT
-    queueEntry.leftAt = new Date()
-    await this.queueRepository.save(queueEntry)
+    queueEntry.status = QueueStatus.LEFT;
+    queueEntry.leftAt = new Date();
+    await this.queueRepository.save(queueEntry);
 
-    this.logger.log(`User ${queueEntry.username} left queue`)
+    this.logger.log(`User ${queueEntry.username} left queue`);
   }
 
   /**
@@ -88,18 +93,20 @@ export class MultiplayerQueueService {
         userId,
         status: QueueStatus.WAITING,
       },
-    })
+    });
 
     if (!queueEntry) {
-      return null
+      return null;
     }
 
     // Update wait time
-    const waitTime = Math.floor((Date.now() - queueEntry.createdAt.getTime()) / 1000)
-    queueEntry.waitTime = waitTime
-    await this.queueRepository.save(queueEntry)
+    const waitTime = Math.floor(
+      (Date.now() - queueEntry.createdAt.getTime()) / 1000,
+    );
+    queueEntry.waitTime = waitTime;
+    await this.queueRepository.save(queueEntry);
 
-    return this.mapToQueueStatusDto(queueEntry)
+    return this.mapToQueueStatusDto(queueEntry);
   }
 
   /**
@@ -108,18 +115,18 @@ export class MultiplayerQueueService {
   async getQueueList(): Promise<QueueStatusDto[]> {
     const queueEntries = await this.queueRepository.find({
       where: { status: QueueStatus.WAITING },
-      order: { createdAt: "ASC" },
-    })
+      order: { createdAt: 'ASC' },
+    });
 
     // Update wait times
-    const now = Date.now()
+    const now = Date.now();
     for (const entry of queueEntries) {
-      entry.waitTime = Math.floor((now - entry.createdAt.getTime()) / 1000)
+      entry.waitTime = Math.floor((now - entry.createdAt.getTime()) / 1000);
     }
 
-    await this.queueRepository.save(queueEntries)
+    await this.queueRepository.save(queueEntries);
 
-    return queueEntries.map((entry) => this.mapToQueueStatusDto(entry))
+    return queueEntries.map((entry) => this.mapToQueueStatusDto(entry));
   }
 
   /**
@@ -128,43 +135,48 @@ export class MultiplayerQueueService {
   async getQueueStats(): Promise<QueueStatsDto> {
     const waitingEntries = await this.queueRepository.find({
       where: { status: QueueStatus.WAITING },
-    })
+    });
 
-    const now = Date.now()
-    const waitTimes = waitingEntries.map((entry) => Math.floor((now - entry.createdAt.getTime()) / 1000))
+    const now = Date.now();
+    const waitTimes = waitingEntries.map((entry) =>
+      Math.floor((now - entry.createdAt.getTime()) / 1000),
+    );
 
     // Group by skill level
-    const bySkillLevel: Record<string, number> = {}
+    const bySkillLevel: Record<string, number> = {};
     Object.values(SkillLevel).forEach((level) => {
-      bySkillLevel[level] = 0
-    })
+      bySkillLevel[level] = 0;
+    });
 
     // Group by game mode
-    const byGameMode: Record<string, number> = {}
+    const byGameMode: Record<string, number> = {};
 
     waitingEntries.forEach((entry) => {
-      bySkillLevel[entry.skillLevel]++
-      byGameMode[entry.gameMode] = (byGameMode[entry.gameMode] || 0) + 1
-    })
+      bySkillLevel[entry.skillLevel]++;
+      byGameMode[entry.gameMode] = (byGameMode[entry.gameMode] || 0) + 1;
+    });
 
     // Get matches created today
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     const matchesToday = await this.matchRepository.count({
       where: {
         createdAt: MoreThan(today),
       },
-    })
+    });
 
     return {
       totalInQueue: waitingEntries.length,
       bySkillLevel,
       byGameMode,
-      averageWaitTime: waitTimes.length > 0 ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length : 0,
+      averageWaitTime:
+        waitTimes.length > 0
+          ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length
+          : 0,
       longestWaitTime: waitTimes.length > 0 ? Math.max(...waitTimes) : 0,
       matchesToday,
-    }
+    };
   }
 
   /**
@@ -173,13 +185,13 @@ export class MultiplayerQueueService {
   async getMatch(matchId: string): Promise<MatchResultDto> {
     const match = await this.matchRepository.findOne({
       where: { id: matchId },
-    })
+    });
 
     if (!match) {
-      throw new NotFoundException("Match not found")
+      throw new NotFoundException('Match not found');
     }
 
-    return this.mapToMatchResultDto(match)
+    return this.mapToMatchResultDto(match);
   }
 
   /**
@@ -225,25 +237,27 @@ export class MultiplayerQueueService {
   async processMatchmaking(): Promise<void> {
     const waitingPlayers = await this.queueRepository.find({
       where: { status: QueueStatus.WAITING },
-      order: { createdAt: "ASC" },
+      order: { createdAt: 'ASC' },
       take: 200,
-    })
+    });
 
     if (waitingPlayers.length < 2) {
-      return
+      return;
     }
 
-    this.logger.log(`Processing matchmaking for ${waitingPlayers.length} players`)
+    this.logger.log(
+      `Processing matchmaking for ${waitingPlayers.length} players`,
+    );
 
     // Group players by game mode and skill level
-    const playerGroups = this.groupPlayersForMatching(waitingPlayers)
+    const playerGroups = this.groupPlayersForMatching(waitingPlayers);
 
     for (const group of playerGroups) {
       if (group.length >= 2) {
         // Use graph-based stable pairing instead of naive slice(0,2)
-        const pairs = this.pairPlayersInGroup(group)
+        const pairs = this.pairPlayersInGroup(group);
         for (const pair of pairs) {
-          await this.createMatch(pair)
+          await this.createMatch(pair);
         }
       }
     }
@@ -278,47 +292,47 @@ export class MultiplayerQueueService {
    * @returns An array of 2-player pairs to match.
    */
   private pairPlayersInGroup(group: Queue[]): [Queue, Queue][] {
-    if (group.length < 2) return []
+    if (group.length < 2) return [];
 
-    const n = group.length
-    const matched = new Array<boolean>(n).fill(false)
-    const pairs: [Queue, Queue][] = []
+    const n = group.length;
+    const matched = new Array<boolean>(n).fill(false);
+    const pairs: [Queue, Queue][] = [];
 
     // Build sorted list of all compatible edges
     interface Edge {
-      i: number
-      j: number
-      score: number
+      i: number;
+      j: number;
+      score: number;
     }
 
-    const edges: Edge[] = []
+    const edges: Edge[] = [];
 
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const score = this.computeCompatibilityScore(group[i], group[j])
+        const score = this.computeCompatibilityScore(group[i], group[j]);
         // -1 signals incompatibility (avoidOpponents conflict)
         if (score >= 0) {
-          edges.push({ i, j, score })
+          edges.push({ i, j, score });
         }
       }
     }
 
     // Sort by score descending; tie-break by (i, j) for determinism
     edges.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      if (a.i !== b.i) return a.i - b.i
-      return a.j - b.j
-    })
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.i !== b.i) return a.i - b.i;
+      return a.j - b.j;
+    });
 
     // Greedy matching
     for (const edge of edges) {
-      if (matched[edge.i] || matched[edge.j]) continue
-      matched[edge.i] = true
-      matched[edge.j] = true
-      pairs.push([group[edge.i], group[edge.j]])
+      if (matched[edge.i] || matched[edge.j]) continue;
+      matched[edge.i] = true;
+      matched[edge.j] = true;
+      pairs.push([group[edge.i], group[edge.j]]);
     }
 
-    return pairs
+    return pairs;
   }
 
   /**
@@ -329,24 +343,24 @@ export class MultiplayerQueueService {
    * cross-skill buckets so they don't starve in the queue.
    */
   private groupPlayersForMatching(players: Queue[]): Queue[][] {
-    const groups: Record<string, Queue[]> = {}
+    const groups: Record<string, Queue[]> = {};
 
     players.forEach((player) => {
-      const key = `${player.gameMode}-${player.skillLevel}`
+      const key = `${player.gameMode}-${player.skillLevel}`;
       if (!groups[key]) {
-        groups[key] = []
+        groups[key] = [];
       }
-      groups[key].push(player)
-    })
+      groups[key].push(player);
+    });
 
     // Also try cross-skill matching for players waiting too long
-    const longWaitingPlayers = players.filter((p) => p.waitTime > 120) // 2 minutes
+    const longWaitingPlayers = players.filter((p) => p.waitTime > 120); // 2 minutes
     if (longWaitingPlayers.length >= 2) {
-      const crossSkillKey = `cross-skill-${longWaitingPlayers[0].gameMode}`
-      groups[crossSkillKey] = longWaitingPlayers
+      const crossSkillKey = `cross-skill-${longWaitingPlayers[0].gameMode}`;
+      groups[crossSkillKey] = longWaitingPlayers;
     }
 
-    return Object.values(groups)
+    return Object.values(groups);
   }
 
   /**
@@ -363,20 +377,22 @@ export class MultiplayerQueueService {
    *                player indices to ensure determinism)
    */
   private computeCompatibilityScore(a: Queue, b: Queue): number {
-    const aAvoidsB = a.preferences?.avoidOpponents?.includes(b.userId) ?? false
-    const bAvoidsA = b.preferences?.avoidOpponents?.includes(a.userId) ?? false
+    const aAvoidsB = a.preferences?.avoidOpponents?.includes(b.userId) ?? false;
+    const bAvoidsA = b.preferences?.avoidOpponents?.includes(a.userId) ?? false;
 
     // Incompatible — remove edge entirely
     if (aAvoidsB || bAvoidsA) {
-      return -1
+      return -1;
     }
 
-    const aPrefersB = a.preferences?.preferredOpponents?.includes(b.userId) ?? false
-    const bPrefersA = b.preferences?.preferredOpponents?.includes(a.userId) ?? false
+    const aPrefersB =
+      a.preferences?.preferredOpponents?.includes(b.userId) ?? false;
+    const bPrefersA =
+      b.preferences?.preferredOpponents?.includes(a.userId) ?? false;
 
-    if (aPrefersB && bPrefersA) return 100  // mutual preference
-    if (aPrefersB || bPrefersA) return 50   // one-sided preference
-    return 10                                // neutral
+    if (aPrefersB && bPrefersA) return 100; // mutual preference
+    if (aPrefersB || bPrefersA) return 50; // one-sided preference
+    return 10; // neutral
   }
 
   /**
@@ -386,13 +402,15 @@ export class MultiplayerQueueService {
    */
   private async createMatch(players: Queue[]): Promise<Match> {
     if (players.length < 2) {
-      throw new BadRequestException("Need at least 2 players to create a match")
+      throw new BadRequestException(
+        'Need at least 2 players to create a match',
+      );
     }
 
     // Check preferences
     if (!this.checkPlayerCompatibility(players)) {
-      this.logger.log("Players not compatible based on preferences")
-      return null
+      this.logger.log('Players not compatible based on preferences');
+      return null;
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -401,24 +419,28 @@ export class MultiplayerQueueService {
         playerUsernames: players.map((p) => p.username),
         gameMode: players[0].gameMode,
         skillLevel: players[0].skillLevel,
-        averageWaitTime: Math.floor(players.reduce((sum, p) => sum + p.waitTime, 0) / players.length),
-      })
+        averageWaitTime: Math.floor(
+          players.reduce((sum, p) => sum + p.waitTime, 0) / players.length,
+        ),
+      });
 
-      const savedMatch = await manager.save(match)
+      const savedMatch = await manager.save(match);
 
       // Update queue entries within the same transaction
       for (const player of players) {
-        player.status = QueueStatus.MATCHED
-        player.matchId = savedMatch.id
-        player.matchedAt = new Date()
+        player.status = QueueStatus.MATCHED;
+        player.matchId = savedMatch.id;
+        player.matchedAt = new Date();
       }
 
-      await manager.save(players)
+      await manager.save(players);
 
-      this.logger.log(`Created match ${savedMatch.id} with players: ${players.map((p) => p.username).join(", ")}`)
+      this.logger.log(
+        `Created match ${savedMatch.id} with players: ${players.map((p) => p.username).join(', ')}`,
+      );
 
-      return savedMatch
-    })
+      return savedMatch;
+    });
   }
 
   /**
@@ -427,22 +449,22 @@ export class MultiplayerQueueService {
   private checkPlayerCompatibility(players: Queue[]): boolean {
     for (let i = 0; i < players.length; i++) {
       for (let j = i + 1; j < players.length; j++) {
-        const player1 = players[i]
-        const player2 = players[j]
+        const player1 = players[i];
+        const player2 = players[j];
 
         // Check if player1 wants to avoid player2
         if (player1.preferences?.avoidOpponents?.includes(player2.userId)) {
-          return false
+          return false;
         }
 
         // Check if player2 wants to avoid player1
         if (player2.preferences?.avoidOpponents?.includes(player1.userId)) {
-          return false
+          return false;
         }
       }
     }
 
-    return true
+    return true;
   }
 
   /**
@@ -450,15 +472,15 @@ export class MultiplayerQueueService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async cleanupOldEntries(): Promise<void> {
-    const oneDayAgo = new Date()
-    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
     const result = await this.queueRepository.delete({
       createdAt: LessThan(oneDayAgo),
       status: QueueStatus.LEFT,
-    })
+    });
 
-    this.logger.log(`Cleaned up ${result.affected} old queue entries`)
+    this.logger.log(`Cleaned up ${result.affected} old queue entries`);
   }
 
   /**
@@ -476,7 +498,7 @@ export class MultiplayerQueueService {
       matchId: queue.matchId,
       createdAt: queue.createdAt,
       matchedAt: queue.matchedAt,
-    }
+    };
   }
 
   /**
@@ -492,6 +514,6 @@ export class MultiplayerQueueService {
       skillLevel: match.skillLevel,
       averageWaitTime: match.averageWaitTime,
       createdAt: match.createdAt,
-    }
+    };
   }
 }

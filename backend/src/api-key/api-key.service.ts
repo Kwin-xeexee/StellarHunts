@@ -93,7 +93,11 @@ export class ApiKeyService {
     }
   }
 
-  getQuotaUsage(key: string): { used: number; limit: number; remaining: number } {
+  getQuotaUsage(key: string): {
+    used: number;
+    limit: number;
+    remaining: number;
+  } {
     const apiKey = this.apiKeys.get(key);
     if (!apiKey) {
       return { used: 0, limit: 0, remaining: 0 };
@@ -101,7 +105,10 @@ export class ApiKeyService {
     return {
       used: apiKey.requestsThisMonth,
       limit: apiKey.monthlyRequestQuota,
-      remaining: Math.max(0, apiKey.monthlyRequestQuota - apiKey.requestsThisMonth),
+      remaining: Math.max(
+        0,
+        apiKey.monthlyRequestQuota - apiKey.requestsThisMonth,
+      ),
     };
   }
 

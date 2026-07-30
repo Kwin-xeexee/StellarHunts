@@ -15,9 +15,9 @@ export class UserRankingService {
     // In a real app, you would fetch actual user metrics here
     const mockAchievements = Math.floor(Math.random() * 10);
     const mockActivityPoints = Math.floor(Math.random() * 1000);
-    
+
     // Calculate score (adjust weights as needed)
-    const score = (mockAchievements * 100) + mockActivityPoints;
+    const score = mockAchievements * 100 + mockActivityPoints;
 
     let userRank = await this.userRankRepository.findOne({ where: { userId } });
 
