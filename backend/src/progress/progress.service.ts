@@ -20,21 +20,16 @@ export class ProgressService {
       );
     }
 
-    // Optionally recalculate percentComplete if needed
     const percentComplete =
       progress.totalPuzzles > 0
-        ? (progress.completedPuzzles / progress.totalPuzzles) * 100
+        ? parseFloat(((progress.completedPuzzles / progress.totalPuzzles) * 100).toFixed(2))
         : 0;
-
-    progress.percentComplete = parseFloat(percentComplete.toFixed(2));
-
-    await this.progressRepo.save(progress); // Persist recalculated value
 
     return {
       userId: progress.userId,
       completedPuzzles: progress.completedPuzzles,
       totalPuzzles: progress.totalPuzzles,
-      percentComplete: progress.percentComplete,
+      percentComplete,
       lastUpdated: progress.lastUpdated,
     };
   }
