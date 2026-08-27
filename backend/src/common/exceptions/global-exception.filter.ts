@@ -7,10 +7,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import type { ConfigService } from '@nestjs/config';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  constructor(private readonly configService: ConfigService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -24,18 +27,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       status = exception.getStatus();
       message = exception.getResponse();
     } else if (exception instanceof Error) {
-      // Log the full error for debugging
       this.logger.error(
         `Unhandled error: ${exception.message}`,
         exception.stack,
       );
       message =
-        process.env.NODE_ENV === 'production'
+        this.configService.get<string>('appConfig.environment') === 'production'
           ? 'Internal server error'
           : exception.message;
     }
 
-    // Log the error details
     this.logger.error(
       `HTTP ${status} Error: ${JSON.stringify(message)} - ${request.method} ${request.url}`,
     );

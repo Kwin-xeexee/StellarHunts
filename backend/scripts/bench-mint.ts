@@ -21,16 +21,6 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-interface CliArgs {
-  url: string;
-  path: string;
-  requests: number;
-  concurrency: number;
-  warmup: number;
-  timeoutMs: number;
-  json: boolean;
-}
-
 interface RequestResult {
   status: number;
   elapsedMs: number;
@@ -54,8 +44,17 @@ interface Stats {
   ranAt: string;
 }
 
-// -------- arg parsing --------
-function parseArgs(argv: string[]): CliArgs {
+interface BenchConfig {
+  url: string;
+  path: string;
+  requests: number;
+  concurrency: number;
+  warmup: number;
+  timeoutMs: number;
+  json: boolean;
+}
+
+function parseArgs(argv: string[]): BenchConfig {
   const args: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];

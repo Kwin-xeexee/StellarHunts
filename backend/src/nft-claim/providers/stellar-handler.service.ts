@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ClaimNFTDto } from '../dto/claim-nft.dto';
+import type { ConfigService } from '@nestjs/config';
 
 /**
  * Talks to the Stellar / Soroban blockchain on behalf of the backend.
@@ -23,8 +24,8 @@ export class StellarHandlerService {
   private readonly logger = new Logger(StellarHandlerService.name);
   private readonly isMockMode: boolean;
 
-  constructor() {
-    this.isMockMode = process.env.STELLAR_MODE === 'mock';
+  constructor(private readonly configService: ConfigService) {
+    this.isMockMode = configService.get<string>('appConfig.stellarMode') === 'mock';
     this.logger.log(
       `Stellar handler initialized in ${this.isMockMode ? 'mock' : 'live'} mode`,
     );

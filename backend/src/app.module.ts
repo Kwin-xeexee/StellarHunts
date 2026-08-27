@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import * as Joi from 'joi';
 
 import appConfig from 'config/app.config';
+import cacheConfig from 'config/cache.config';
 import databaseConfig from 'config/database.config';
 
 import { User } from './auth/entities/user.entity';
@@ -49,7 +50,7 @@ import { MaintenanceModeModule } from './maintenance-mode/maintenance-mode.modul
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env'],
-      load: [appConfig, databaseConfig],
+      load: [appConfig, cacheConfig, databaseConfig],
       cache: true,
       validationSchema: Joi.object({
         JWT_SECRET: Joi.string().required(),
@@ -58,6 +59,13 @@ import { MaintenanceModeModule } from './maintenance-mode/maintenance-mode.modul
         DATABASE_USER: Joi.string().required(),
         DATABASE_PASSWORD: Joi.string().required(),
         DATABASE_NAME: Joi.string().required(),
+        PORT: Joi.number().default(3001),
+        STELLAR_MODE: Joi.string().default('mock'),
+        REDIS_HOST: Joi.string().default('localhost'),
+        REDIS_PORT: Joi.number().default(6379),
+        REDIS_DB: Joi.number().default(0),
+        FRONTEND_URL: Joi.string().default('http://localhost:3000'),
+        API_VERSION: Joi.string().default('v1'),
       }),
     }),
     TypeOrmModule.forRootAsync({

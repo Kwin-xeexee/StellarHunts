@@ -133,7 +133,7 @@ export class AppModule {}
   // Excluded from the global prefix above, so this resolves to /docs.
   SwaggerModule.setup('docs', app, document);
 
-  const port = parseInt(process.env.PORT, 10) || 3001;
+  const port = configService.get<number>('appConfig.port') ?? 3001;
   await app.listen(port);
   logger.log(`StellarHunts API listening on http://localhost:${port}`);
   logger.log(`Swagger UI available at http://localhost:${port}/docs`);

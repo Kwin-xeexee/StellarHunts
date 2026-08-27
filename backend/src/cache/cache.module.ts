@@ -20,24 +20,11 @@ import { CacheService } from './cache.service';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService): RedisOptions => {
-        const host =
-          configService.get<string>('cache.redisHost') ||
-          process.env.REDIS_HOST ||
-          'localhost';
-        const port = Number(
-          configService.get<string>('cache.redisPort') ||
-            process.env.REDIS_PORT ||
-            6379,
-        );
-        const password =
-          configService.get<string>('cache.redisPassword') ||
-          process.env.REDIS_PASSWORD;
-        const db = Number(
-          configService.get<string>('cache.redisDb') ||
-            process.env.REDIS_DB ||
-            0,
-        );
-        const url = process.env.REDIS_URL;
+        const url = configService.get<string>('cache.redisUrl');
+        const host = configService.get<string>('cache.redisHost');
+        const port = configService.get<number>('cache.redisPort');
+        const password = configService.get<string>('cache.redisPassword');
+        const db = configService.get<number>('cache.redisDb');
 
         return {
           type: 'single',
@@ -46,9 +33,6 @@ import { CacheService } from './cache.service';
           port: url ? undefined : port,
           password,
           db,
-          // Lazy connect so the app can boot even when Redis is temporarily
-          // unavailable; the cache becomes a no-op and reads fall through
-          // to the loader (#107). Subsequent requests will reconnect.
           lazyConnect: true,
           maxRetriesPerRequest: 1,
           enableOfflineQueue: false,
